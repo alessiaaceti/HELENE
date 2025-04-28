@@ -90,7 +90,9 @@ For more information regarding custom end effectors see the [corresponding docum
 
 
 ### Troubleshooting
+In this section we collect tips that can help with installation and operation in the event of errors. This list will be continuously expanded.
 
+#### Firmware
 If you encounter problems while compiling the ESP projects and get an error due to missing ros_lib headers, try building your customized libs like this:
 
 ```
@@ -98,5 +100,11 @@ cd <Path to the failing project>/lib
 rm -rf ros_lib 
 rosrun rosserial_arduino make_libraries.py .
 ```
+#### Hardware assembly
+Incorrect angle measurements: Each joint has its own encoder, which always consists of a sensor and a magnet. Make sure that the polarity of the magnet is diametrically opposed, only then can it work with the sensor. Make sure that the magnet cannot move in the recess. If the press fit with your magnet model is not sufficient, we recommend fixing it with a drop of superglue. Carry out a new calibration after every change to the robot (even after tensioning belts).
 
+Motors move incorrectly/not at all: Make sure that the power supply is sufficient and use a multimeter to test that the supply is maintained even when the motors are energized. Check the wiring of the motors. Some stepper motor manufacturers use different plugs/cable colors. If the phases are mixed up, the motor may change direction or not move smoothly at all.
+
+#### Operation
+Robot does not react / does not hold position after loss of voltage: Parts of the electronics are supplied with voltage by both the power supply unit and the USB connection. If the 24V supply is interrupted but the USB connection is maintained, the ESP32 will continue to run. To restart the motors, the start sequence must be carried out again as described above, i.e. first disconnect both connections and then reconnect first 24V, then USB.
 
