@@ -50,12 +50,23 @@ qtcreator-*
 # Catkin custom files
 CATKIN_IGNORE
 
-.vscode/*
+
+# VS Code files
+.vscode/
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
 *.code-workspace
+*.db
+*.db-shm
+*.db-wal
+*.ipch
+
+# ROS 2 build folders
+build/
+install/
+log/
 
 # Local History for Visual Studio Code
 .history/

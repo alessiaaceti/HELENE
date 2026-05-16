@@ -1,0 +1,21 @@
+controller_manager:
+  ros__parameters:
+    update_rate: 30 # hz, same as old loop_rate
+    
+    # define the names of our controllers
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    helene_velocity_controller:
+      type: velocity_controllers/JointGroupVelocityController
+
+helene_velocity_controller:
+  ros__parameters:
+    # these names must match the ones in the URDF
+    joints:
+      - q1
+      - q2
+      - q3
+      - q4
+      - q5
+      - q6

@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>screw_driver_description</name>
+  <version>0.0.0</version>
+  <description>Force sensor and screw tool for HELENE impedance task</description>
+  <maintainer email="alessia@todo.todo">Alessia</maintainer>
+  <license>TODO</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>xacro</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

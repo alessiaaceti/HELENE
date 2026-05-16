@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:macro name="screw_driver" params="parent prefix *origin">
+    
+    <joint name="${prefix}sensor_joint" type="fixed">
+      <xacro:insert_block name="origin" />
+      <parent link="${parent}" />
+      <child link="${prefix}force_sensor_link" />
+    </joint>
+
+    <link name="${prefix}force_sensor_link">
+      <visual>
+        <geometry>
+          <cylinder radius="0.04" length="0.03"/>
+        </geometry>
+        <material name="blue"><color rgba="0 0 0.8 1"/></material>
+      </visual>
+    </link>
+
+    <joint name="${prefix}screw_joint" type="fixed">
+      <origin xyz="0 0 0.05" rpy="0 0 0" />
+      <parent link="${prefix}force_sensor_link" />
+      <child link="${prefix}screw_tip_link" />
+    </joint>
+
+    <link name="${prefix}screw_tip_link">
+      <visual>
+        <geometry>
+          <cylinder radius="0.005" length="0.1"/>
+        </geometry>
+        <material name="red"><color rgba="0.8 0 0 1"/></material>
+      </visual>
+    </link>
+    
+  </xacro:macro>
+</robot>
