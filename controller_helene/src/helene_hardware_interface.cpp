@@ -34,7 +34,7 @@ public:
       "hardware_states", 10,
       [this](const helene_msgs::msg::JointPosition::SharedPtr msg) {
         this->angles_msg_ = *msg; // store the latest joint angles
-        // also subscribe to velocities if needed, for now we assume they come in the same message
+        this->velocities_msg_ = *msg; // store the latest joint velocities (assuming they are published in the same message for simplicity)
       });
 
     return hardware_interface::CallbackReturn::SUCCESS;
@@ -96,7 +96,7 @@ public:
     velocity_command_msg_.joint5 = hw_commands_velocity_[4] * (71583.0 / M_PI * 2.0) / 40.0;
     velocity_command_msg_.joint6 = hw_commands_velocity_[5] * (71583.0 / M_PI * 2.0) / 40.0;
 
-    // 4. 
+    // 4. publish the velocity command message
     pub_->publish(velocity_command_msg_);
     
     return hardware_interface::return_type::OK;

@@ -2,7 +2,7 @@
 <package format="3">
   <name>controller_helene</name>
   <version>0.0.0</version>
-  <description>Hardware interface per il robot Helene</description>
+  <description>Hardware interface for robot Helene</description>
   <maintainer email="alessia@todo.todo">alessia</maintainer>
   <license>TODO: License declaration</license>
 

@@ -12,10 +12,10 @@ find_package(rclcpp REQUIRED)
 find_package(controller_interface REQUIRED)
 find_package(helene_msgs REQUIRED)
 
-add_library(helene_hardware_interface SHARED src/helene_hardware_interface.cpp)
+add_library(controller_helene SHARED src/helene_hardware_interface.cpp)
 
 # specify libraries to link a library or executable target against
-ament_target_dependencies(helene_hardware_interface
+ament_target_dependencies(controller_helene
   hardware_interface
   pluginlib
   rclcpp
@@ -23,10 +23,10 @@ ament_target_dependencies(helene_hardware_interface
   helene_msgs
 )
 
-target_include_directories(helene_hardware_interface PRIVATE include)
+target_include_directories(controller_helene PRIVATE include)
 
 install(
-  TARGETS helene_hardware_interface
+  TARGETS controller_helene
   LIBRARY DESTINATION lib
 )
 
