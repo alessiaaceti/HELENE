@@ -1,6 +1,6 @@
 controller_manager:
   ros__parameters:
-    update_rate: 30 # hz, same as old loop_rate
+    update_rate: 50 # hz, same as old loop_rate -> !!! 100 Hz
     
     # define the names of our controllers
     joint_state_broadcaster:
@@ -8,6 +8,9 @@ controller_manager:
 
     helene_velocity_controller:
       type: velocity_controllers/JointGroupVelocityController
+
+    helene_trajectory_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
 
 helene_velocity_controller:
   ros__parameters:
@@ -19,3 +22,29 @@ helene_velocity_controller:
       - q4
       - q5
       - q6
+
+helene_trajectory_controller:
+  ros__parameters:
+    # these names must match the ones in the URDF
+    joints:
+      - q1
+      - q2
+      - q3
+      - q4
+      - q5
+      - q6
+
+    # command interfaces that the controller will accept
+    command_interfaces:
+      - velocity
+
+    # state interfaces that the controller will read from the hardware interface
+    state_interfaces:
+      - position
+      - velocity
+
+    # controller parameters (these can be tuned as needed) -> 
+    state_publish_rate: 50.0     # 100!!!!!!
+    action_monitor_rate: 10.0
+    allow_partial_joints_goal: false
+    open_loop_control: false

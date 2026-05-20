@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<library path="controller_helene">
+<library path="helene_hardware_interface">
   <class name="controller_helene/HeleneHardwareInterface"
          type="controller_helene::HeleneHardwareInterface"
          base_class_type="hardware_interface::SystemInterface">

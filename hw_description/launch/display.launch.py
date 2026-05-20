@@ -34,5 +34,11 @@ def generate_launch_description():
             name='rviz2',
             output='screen',
             arguments=['-d', rviz_config_path]
-        )
+        ),
+        # Node 4. spawn trajectory controller for MoveIt 2
+        Node(
+            package="controller_manager",
+            executable="spawner",
+            arguments=["helene_trajectory_controller"],
+        ),
     ])

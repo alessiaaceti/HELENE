@@ -5,6 +5,7 @@ if(NOT CMAKE_CXX_STANDARD)
   set(CMAKE_CXX_STANDARD 17)
 endif()
 
+# dipendecies
 find_package(ament_cmake REQUIRED)
 find_package(hardware_interface REQUIRED)
 find_package(pluginlib REQUIRED)
@@ -12,10 +13,19 @@ find_package(rclcpp REQUIRED)
 find_package(controller_interface REQUIRED)
 find_package(helene_msgs REQUIRED)
 
-add_library(controller_helene SHARED src/helene_hardware_interface.cpp)
+# library
+add_library(helene_hardware_interface SHARED 
+  src/helene_hardware_interface.cpp
+)
 
-# specify libraries to link a library or executable target against
-ament_target_dependencies(controller_helene
+# include directories
+target_include_directories(helene_hardware_interface PRIVATE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+
+# dependencies
+ament_target_dependencies(helene_hardware_interface
   hardware_interface
   pluginlib
   rclcpp
@@ -23,23 +33,26 @@ ament_target_dependencies(controller_helene
   helene_msgs
 )
 
-target_include_directories(controller_helene PRIVATE include)
+# export plugin description
+pluginlib_export_plugin_description_file(hardware_interface helene_hardware.xml)
 
+# install targets and files
 install(
-  TARGETS controller_helene
+  TARGETS helene_hardware_interface
   LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+  RUNTIME DESTINATION bin
 )
 
 install(
-  DIRECTORY config launch
+  DIRECTORY config launch include
   DESTINATION share/${PROJECT_NAME}
 )
 
+# install plugin description file
 install(
   FILES helene_hardware.xml
   DESTINATION share/${PROJECT_NAME}
 )
-
-pluginlib_export_plugin_description_file(hardware_interface helene_hardware.xml)
 
 ament_package()
