@@ -16,7 +16,9 @@ hardware_interface::CallbackReturn HeleneHardwareInterface::on_init(const hardwa
   hw_sensor_states_.fill(0.0); // Inizializzazione sensore
 
   node_ = std::make_shared<rclcpp::Node>("helene_hw_internal_node");
+
   pub_ = node_->create_publisher<helene_msgs::msg::JointPosition>("hardware_commands", 10);
+  
   sub_ = node_->create_subscription<helene_msgs::msg::JointPosition>(
     "hardware_states", 10,
     [this](const helene_msgs::msg::JointPosition::SharedPtr msg) {
@@ -61,19 +63,30 @@ std::vector<hardware_interface::CommandInterface> HeleneHardwareInterface::expor
 
 hardware_interface::return_type HeleneHardwareInterface::read(const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
 {
+  // read logic
   rclcpp::spin_some(node_);
 
-  // example positions calculus (original logic)
-  for (int i = 0; i < 6; i++) {
-     // todo: logic conversion bit -> radiant
-     // hw_states_position_[i] = ...
-  }
-
+  // update joint states
+  hw_states_position_[0] = angles_msg_.joint1;
+  hw_states_position_[1] = angles_msg_.joint2;
+  hw_states_position_[2] = angles_msg_.joint3;
+  hw_states_position_[3] = angles_msg_.joint4;
+  hw_states_position_[4] = angles_msg_.joint5;
+  hw_states_position_[5] = angles_msg_.joint6;
+  
   return hardware_interface::return_type::OK;
+
 }
 
 hardware_interface::return_type HeleneHardwareInterface::write(const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
 {
+  // update command message
+  velocity_command_msg_.joint1 = hw_commands_velocity_[0];
+  velocity_command_msg_.joint2 = hw_commands_velocity_[1];
+  velocity_command_msg_.joint3 = hw_commands_velocity_[2];
+  velocity_command_msg_.joint4 = hw_commands_velocity_[3];
+  velocity_command_msg_.joint5 = hw_commands_velocity_[4];
+  velocity_command_msg_.joint6 = hw_commands_velocity_[5];
   // command logic
   pub_->publish(velocity_command_msg_);
   return hardware_interface::return_type::OK;
