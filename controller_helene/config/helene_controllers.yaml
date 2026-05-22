@@ -1,6 +1,6 @@
 controller_manager:
   ros__parameters:
-    update_rate: 50 # hz, same as old loop_rate -> !!! 100 Hz
+    update_rate: 100 # !!! upd 
     
     # define the names of our controllers
     joint_state_broadcaster:
@@ -11,6 +11,10 @@ controller_manager:
 
     helene_trajectory_controller:
       type: joint_trajectory_controller/JointTrajectoryController
+
+    # force-torque sensor broadcaster for the end-effector
+    helene_force_broadcaster:
+      type: force_torque_sensor_broadcaster/ForceTorqueSensorBroadcaster
 
 helene_velocity_controller:
   ros__parameters:
@@ -44,7 +48,19 @@ helene_trajectory_controller:
       - velocity
 
     # controller parameters (these can be tuned as needed) -> 
-    state_publish_rate: 50.0     # 100!!!!!!
+    state_publish_rate: 100.0     # !!!!
     action_monitor_rate: 10.0
     allow_partial_joints_goal: false
     open_loop_control: false
+
+    helene_force_broadcaster:
+      ros__parameters:
+        sensor_name: tcp_force_torque_sensor # Must match the <sensor> tag in the URDF !!!!
+        state_interface_names:
+          - force.x
+          - force.y
+          - force.z
+          - torque.x
+          - torque.y
+          - torque.z
+        frame_id: axis_5 # Or end-effector frame in the URDF

@@ -18,6 +18,16 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        # 0. micro-ROS Agent (Endpoint ESP32)
+        # NOTE: Substitute '--dev', '/dev/ttyUSB0' with 'udp4', '--port', '8888' if using Wi-Fi instead of USB
+        Node(
+            package='micro_ros_agent',
+            executable='micro_ros_agent',
+            name='micro_ros_agent',
+            output='screen',
+            arguments=['serial', '--dev', '/dev/ttyUSB0']
+        ),
+
         # 1. publish robot model
         Node(
             package='robot_state_publisher',
@@ -42,5 +52,17 @@ def generate_launch_description():
             package="controller_manager",
             executable="spawner",
             arguments=["helene_velocity_controller"],
+        ),
+        # 5. spawn custom trajectory controller
+        Node(
+            package="controller_manager",
+            executable="spawner",
+            arguments=["helene_trajectory_controller"],
+        ),
+        # 6. spawn force torque sensor broadcaster
+        Node(
+            package="controller_manager",
+            executable="spawner",
+            arguments=["helene_force_broadcaster"],
         ),
     ])
