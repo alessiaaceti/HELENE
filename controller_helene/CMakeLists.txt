@@ -55,4 +55,9 @@ install(
   DESTINATION share/${PROJECT_NAME}
 )
 
+install(PROGRAMS
+  scripts/force_feedback_node.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 ament_package()

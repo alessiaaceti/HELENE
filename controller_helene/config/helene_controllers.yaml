@@ -1,6 +1,6 @@
 controller_manager:
   ros__parameters:
-    update_rate: 100 # !!! upd 
+    update_rate: 100 # !!! 
     
     # define the names of our controllers
     joint_state_broadcaster:
@@ -40,7 +40,7 @@ helene_trajectory_controller:
 
     # command interfaces that the controller will accept
     command_interfaces:
-      - velocity
+      - position
 
     # state interfaces that the controller will read from the hardware interface
     state_interfaces:
@@ -53,14 +53,34 @@ helene_trajectory_controller:
     allow_partial_joints_goal: false
     open_loop_control: false
 
-    helene_force_broadcaster:
-      ros__parameters:
-        sensor_name: tcp_force_torque_sensor # Must match the <sensor> tag in the URDF !!!!
-        state_interface_names:
-          - force.x
-          - force.y
-          - force.z
-          - torque.x
-          - torque.y
-          - torque.z
-        frame_id: axis_5 # Or end-effector frame in the URDF
+    gains:
+      q1: {p: 1000.0, i: 1.0, d: 10.0}
+      q2: {p: 1000.0, i: 1.0, d: 10.0}
+      q3: {p: 1000.0, i: 1.0, d: 10.0}
+      q4: {p: 500.0, i: 1.0, d: 5.0}
+      q5: {p: 500.0, i: 1.0, d: 5.0}
+      q6: {p: 100.0, i: 1.0, d: 1.0}
+
+    constraints:
+      stopped_velocity_tolerance: 0.01
+      goal_time: 0.0
+      q1: { trajectory: 0.1, goal: 0.1 }
+      q2: { trajectory: 0.1, goal: 0.1 }
+      q3: { trajectory: 0.1, goal: 0.1 }
+      q4: { trajectory: 0.1, goal: 0.1 }
+      q5: { trajectory: 0.1, goal: 0.1 }
+      q6: { trajectory: 0.1, goal: 0.1 }
+
+helene_force_broadcaster:
+  ros__parameters:
+    sensor_name: tcp_force_torque_sensor # Must match the <sensor> tag in the URDF !!!!
+    frame_id: axis_5 # Must match the <origin> frame in the URDF for the sensor !!!!
+    #interface_names:
+    #  force:
+    #    x: force.x
+    #    y: force.y
+    #    z: force.z
+    #  torque:
+    #    x: torque.x
+    #    y: torque.y
+    #    z: torque.z

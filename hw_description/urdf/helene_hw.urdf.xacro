@@ -1,139 +1,138 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="helene">
 
-  <xacro:property name="d1" value="0.145" /> 
-  <xacro:property name="a2" value="0.200" />
-  <xacro:property name="d4" value="0.177" /> 
-  <xacro:property name="d6" value="0.055" />
+  <xacro:property name="mesh_scale" value="0.001 0.001 0.001" />
+  <xacro:arg name="use_mock_hardware" default="true" />
+  
+  <xacro:macro name="create_link" params="link_name mesh_file mass ixx iyy izz">
+    <link name="${link_name}">
+      <visual>
+        <geometry>
+          <mesh filename="package://hw_description/meshes/${mesh_file}" scale="${mesh_scale}"/>
+        </geometry>
+        <material name="gold">
+          <color rgba="1 0.549 0 1" />
+        </material>
+      </visual>
+      <collision>
+        <geometry>
+          <mesh filename="package://hw_description/meshes/${mesh_file}" scale="${mesh_scale}"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <mass value="${mass}"/>
+        <inertia ixx="${ixx}" ixy="0.0" ixz="0.0" iyy="${iyy}" iyz="0.0" izz="${izz}"/>
+      </inertial>
+    </link>
+  </xacro:macro>
 
-  <link name="base_link">
-    <visual>
-      <geometry><mesh filename="package://hw_description/meshes/Komponente1.stl" scale="0.001 0.001 0.001"/></geometry>
-    </visual>
+  <link name="world" />
+  <joint name="world_to_base_link" type="fixed">
+    <parent link="world"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <xacro:create_link link_name="base_link" mesh_file="Komponente1.stl" mass="2.0" ixx="0.01" iyy="0.01" izz="0.01" />
+  <xacro:create_link link_name="axis_0"    mesh_file="Komponente2.stl" mass="1.5" ixx="0.01" iyy="0.01" izz="0.01" />
+  <xacro:create_link link_name="axis_1"    mesh_file="Komponente3.stl" mass="1.2" ixx="0.01" iyy="0.01" izz="0.01" />
+  <xacro:create_link link_name="axis_2"    mesh_file="Komponente4.stl" mass="1.0" ixx="0.01" iyy="0.01" izz="0.01" />
+  <xacro:create_link link_name="axis_3"    mesh_file="Komponente5.stl" mass="0.8" ixx="0.005" iyy="0.005" izz="0.005" />
+  <xacro:create_link link_name="axis_4"    mesh_file="Komponente6.stl" mass="0.6" ixx="0.005" iyy="0.005" izz="0.005" />
+  <xacro:create_link link_name="axis_5"    mesh_file="Flansch.stl"     mass="0.3" ixx="0.001" iyy="0.001" izz="0.001" />
+
+  <link name="axis_6">
+    <visual><geometry><cylinder length="0" radius="0"/></geometry></visual>
   </link>
 
   <joint name="q1" type="revolute">
     <parent link="base_link"/><child link="axis_0"/>
-    <origin xyz="0 0 ${d1}" rpy="0 0 0"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
     <axis xyz="0 0 1"/>
-    <limit effort="1000.0" lower="-2.79" upper="2.79" velocity="5.0" />
+    <limit effort="1000.0" lower="-2.79" upper="2.79" velocity="5" />
   </joint>
-
-  <link name="axis_0">
-    <visual>
-      <geometry><mesh filename="package://hw_description/meshes/Komponente2.stl" scale="0.001 0.001 0.001"/></geometry>
-    </visual>
-  </link>
 
   <joint name="q2" type="revolute">
     <parent link="axis_0"/><child link="axis_1"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
-    <axis xyz="0 1 0"/>
-    <limit effort="1000.0" lower="-2.79" upper="2.79" velocity="5.0" />
+    <origin xyz="0.02 0 0.145" rpy="-1.571 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="1000.0" lower="-1.83" upper="1.83" velocity="5" />
   </joint>
-
-  <link name="axis_1">
-    <visual>
-      <geometry><mesh filename="package://hw_description/meshes/Komponente3.stl" scale="0.001 0.001 0.001"/></geometry>
-    </visual>
-  </link>
 
   <joint name="q3" type="revolute">
     <parent link="axis_1"/><child link="axis_2"/>
-    <origin xyz="0 0 ${a2}" rpy="0 0 0"/>
-    <axis xyz="0 1 0"/>
-    <limit effort="1000.0" lower="-2.79" upper="2.79" velocity="5.0" />
+    <origin xyz="0 -0.200 0" rpy="0 0 3.141"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="1000.0" lower="0" upper="2.7925" velocity="5" />
   </joint>
-
-  <link name="axis_2">
-    <visual>
-      <geometry><mesh filename="package://hw_description/meshes/Komponente4.stl" scale="0.001 0.001 0.001"/></geometry>
-    </visual>
-  </link>
 
   <joint name="q4" type="revolute">
     <parent link="axis_2"/><child link="axis_3"/>
-    <origin xyz="0 0 ${d4}" rpy="0 1.5708 0"/>
+    <origin xyz="0 0 0" rpy="-1.571 0 0"/>
     <axis xyz="0 0 1"/>
-    <limit effort="1000.0" lower="-3.14" upper="3.14" velocity="5.0" />
+    <limit effort="1000.0" lower="-2.9" upper="2.9" velocity="5" />
   </joint>
-
-  <link name="axis_3">
-    <visual>
-      <geometry><mesh filename="package://hw_description/meshes/Komponente5.stl" scale="0.001 0.001 0.001"/></geometry>
-    </visual>
-  </link>
 
   <joint name="q5" type="revolute">
     <parent link="axis_3"/><child link="axis_4"/>
-    <origin xyz="0 0 0" rpy="0 -1.5708 0"/>
-    <axis xyz="0 1 0"/>
-    <limit effort="1000.0" lower="-3.14" upper="3.14" velocity="5.0" />
+    <origin xyz="0 0 0.177" rpy="1.571 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="1000.0" lower="-2.7" upper="2.7" velocity="5" />
   </joint>
-
-  <link name="axis_4">
-    <visual>
-      <geometry><mesh filename="package://hw_description/meshes/Komponente6.stl" scale="0.001 0.001 0.001"/></geometry>
-    </visual>
-  </link>
 
   <joint name="q6" type="revolute">
     <parent link="axis_4"/><child link="axis_5"/>
-    <origin xyz="0 0 ${d6}" rpy="0 0 0"/>
+    <origin xyz="0 0 0" rpy="-1.571 0 0"/>
     <axis xyz="0 0 1"/>
-    <limit effort="1000.0" lower="-6.28" upper="6.28" velocity="5.0" />
+    <limit effort="1000.0" lower="-3.141" upper="3.141" velocity="5" />
   </joint>
 
-  <link name="axis_5">
-    <visual>
-      <geometry><mesh filename="package://hw_description/meshes/Flansch.stl" scale="0.001 0.001 0.001"/></geometry>
-    </visual>
-  </link>
+  <joint name="q7" type="fixed">
+    <parent link="axis_5"/><child link="axis_6"/>
+    <origin xyz="0 0 0.05" rpy="0 0 0"/>
+  </joint>
 
-  <ros2_control name="HeleneHardware" type="system">
+  <ros2_control name="HeleneControl" type="system">
     <hardware>
-      <plugin>controller_helene/HeleneHardwareInterface</plugin>
+        <xacro:if value="$(arg use_mock_hardware)">
+            <plugin>gazebo_ros2_control/GazeboSystem</plugin>
+        </xacro:if>
+        <xacro:unless value="$(arg use_mock_hardware)">
+            <plugin>controller_helene/HeleneHardwareInterface</plugin>
+            <param name="device">/dev/ttyUSB0</param> </xacro:unless>
     </hardware>
     
-    <joint name="q1">
-      <command_interface name="velocity"/>
-      <state_interface name="position"/>
-      <state_interface name="velocity"/>
-    </joint>
-    <joint name="q2">
-      <command_interface name="velocity"/>
-      <state_interface name="position"/>
-      <state_interface name="velocity"/>
-    </joint>
-    <joint name="q3">
-      <command_interface name="velocity"/>
-      <state_interface name="position"/>
-      <state_interface name="velocity"/>
-    </joint>
-    <joint name="q4">
-      <command_interface name="velocity"/>
-      <state_interface name="position"/>
-      <state_interface name="velocity"/>
-    </joint>
-    <joint name="q5">
-      <command_interface name="velocity"/>
-      <state_interface name="position"/>
-      <state_interface name="velocity"/>
-    </joint>
-    <joint name="q6">
-      <command_interface name="velocity"/>
-      <state_interface name="position"/>
-      <state_interface name="velocity"/>
-    </joint>
-    <!-- Force-torque sensor at the end-effector -->
+    <xacro:macro name="configure_joint" params="joint_name">
+      <joint name="${joint_name}">
+        <command_interface name="position"/>
+        <command_interface name="velocity"/>
+        
+        <state_interface name="position">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+        <state_interface name="velocity"/>
+      </joint>
+    </xacro:macro>
+
+    <xacro:configure_joint joint_name="q1"/>
+    <xacro:configure_joint joint_name="q2"/>
+    <xacro:configure_joint joint_name="q3"/>
+    <xacro:configure_joint joint_name="q4"/>
+    <xacro:configure_joint joint_name="q5"/>
+    <xacro:configure_joint joint_name="q6"/>
+
     <sensor name="tcp_force_torque_sensor">
-      <state_interface name="force.x"/>
-      <state_interface name="force.y"/>
-      <state_interface name="force.z"/>
-      <state_interface name="torque.x"/>
-      <state_interface name="torque.y"/>
-      <state_interface name="torque.z"/>
+      <state_interface name="force.x"/><state_interface name="force.y"/><state_interface name="force.z"/>
+      <state_interface name="torque.x"/><state_interface name="torque.y"/><state_interface name="torque.z"/>
     </sensor>
   </ros2_control>
+
+  <gazebo>
+    <plugin name="gazebo_ros2_control" filename="libgazebo_ros2_control.so">
+      <parameters>$(find controller_helene)/config/helene_controllers.yaml</parameters>
+      <robotNamespace>/</robotNamespace>
+    </plugin>
+  </gazebo>
 
 </robot>
