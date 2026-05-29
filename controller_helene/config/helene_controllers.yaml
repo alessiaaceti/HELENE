@@ -1,6 +1,6 @@
 controller_manager:
   ros__parameters:
-    update_rate: 100 # !!! 
+    update_rate: 1000 # !!! 
     
     # define the names of our controllers
     joint_state_broadcaster:
@@ -26,6 +26,7 @@ helene_velocity_controller:
       - q4
       - q5
       - q6
+    interface_name: velocity
 
 helene_trajectory_controller:
   ros__parameters:
@@ -48,7 +49,7 @@ helene_trajectory_controller:
       - velocity
 
     # controller parameters (these can be tuned as needed) -> 
-    state_publish_rate: 100.0     # !!!!
+    state_publish_rate: 1000.0     # !!!!
     action_monitor_rate: 10.0
     allow_partial_joints_goal: false
     open_loop_control: false
@@ -71,10 +72,17 @@ helene_trajectory_controller:
       q5: { trajectory: 0.1, goal: 0.1 }
       q6: { trajectory: 0.1, goal: 0.1 }
 
+joint_state_broadcaster:
+  ros__parameters:
+    # Use empty joints list to broadcast all available interfaces 
+    # (q1-q6) found in the hardware interface.
+    # If you leave this out, it defaults to "all".
+    use_local_topics: false
+
 helene_force_broadcaster:
   ros__parameters:
     sensor_name: tcp_force_torque_sensor # Must match the <sensor> tag in the URDF !!!!
-    frame_id: axis_5 # Must match the <origin> frame in the URDF for the sensor !!!!
+    frame_id: axis_6 # Must match the <origin> frame in the URDF for the sensor !!!!
     #interface_names:
     #  force:
     #    x: force.x

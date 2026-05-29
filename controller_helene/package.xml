@@ -11,6 +11,11 @@
   <depend>hardware_interface</depend>
   <depend>pluginlib</depend>
   <depend>rclcpp</depend>
+  <depend>geometry_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>kdl_parser</depend>
+  <depend>orocos_kdl</depend>
   <depend>controller_interface</depend>
   <depend>helene_msgs</depend>
   <depend>ament_index_cpp</depend>

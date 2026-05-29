@@ -1,7 +1,11 @@
 #include "helene_hardware_interface.hpp"
 #include <cmath>
+#include <vector>
+#include <string>
+
 #include "pluginlib/class_list_macros.hpp"
-#include "geometry_msgs/msg/wrench.hpp" // for force-torque sensor message type (predisposition)
+#include "hardware_interface/types/hardware_interface_type_values.hpp"
+#include "rclcpp/rclcpp.hpp"
 
 namespace controller_helene 
 {
@@ -10,35 +14,25 @@ hardware_interface::CallbackReturn HeleneHardwareInterface::on_init(const hardwa
   if (hardware_interface::SystemInterface::on_init(info) != hardware_interface::CallbackReturn::SUCCESS) {
     return hardware_interface::CallbackReturn::ERROR;
   }
-  
-  hw_states_position_.resize(6, 0.0);
-  hw_states_velocity_.resize(6, 0.0);
-  hw_commands_velocity_.resize(6, 0.0);
-  hw_sensor_states_.fill(0.0); // predisposition for force-torque sensor states
 
+  // Initialize state and command vectors (6 DOF)
+  hw_states_position_.assign(6, 0.0);
+  hw_states_velocity_.assign(6, 0.0);
+  hw_commands_position_.assign(6, 0.0);
+  hw_sensor_states_.fill(0.0);
+
+  // Create internal node for ROS 2 communication
   node_ = std::make_shared<rclcpp::Node>("helene_hw_internal_node");
 
+  // Publisher for position commands sent to the robot
   pub_ = node_->create_publisher<helene_msgs::msg::JointPosition>("hardware_commands", 10);
   
+  // Subscriber for current robot states
   sub_ = node_->create_subscription<helene_msgs::msg::JointPosition>(
     "hardware_states", 10,
     [this](const helene_msgs::msg::JointPosition::SharedPtr msg) {
-      this->angles_msg_ = *msg;
-      this->velocities_msg_ = *msg;
+      this->joint_states_msg_ = *msg;
     });
-
-  /* // decomment if force-torque sensor is added to the URDF and integrated into the hardware interface
-  force_sub_ = node_->create_subscription<geometry_msgs::msg::Wrench>(
-    "helene/force_torque", 10,
-    [this](const geometry_msgs::msg::Wrench::SharedPtr msg) {
-      this->hw_sensor_states_[0] = msg->force.x;
-      this->hw_sensor_states_[1] = msg->force.y;
-      this->hw_sensor_states_[2] = msg->force.z;
-      this->hw_sensor_states_[3] = msg->torque.x;
-      this->hw_sensor_states_[4] = msg->torque.y;
-      this->hw_sensor_states_[5] = msg->torque.z;
-    });
-  */
 
   return hardware_interface::CallbackReturn::SUCCESS;
 }
@@ -46,21 +40,21 @@ hardware_interface::CallbackReturn HeleneHardwareInterface::on_init(const hardwa
 std::vector<hardware_interface::StateInterface> HeleneHardwareInterface::export_state_interfaces()
 {
   std::vector<hardware_interface::StateInterface> state_interfaces;
-  // joints
-  for (uint i = 0; i < 6; i++) {
+  
+  // Export Position and Velocity state interfaces for each joint
+  for (size_t i = 0; i < info_.joints.size(); i++) {
     state_interfaces.emplace_back(hardware_interface::StateInterface(
       info_.joints[i].name, hardware_interface::HW_IF_POSITION, &hw_states_position_[i]));
     state_interfaces.emplace_back(hardware_interface::StateInterface(
       info_.joints[i].name, hardware_interface::HW_IF_VELOCITY, &hw_states_velocity_[i]));
   }
-  // sensor (predisposition)
-  const std::string sensor_name = "tcp_force_torque_sensor"; // must match the name in the URDF
-  state_interfaces.emplace_back(hardware_interface::StateInterface(sensor_name, "force.x", &hw_sensor_states_[0]));
-  state_interfaces.emplace_back(hardware_interface::StateInterface(sensor_name, "force.y", &hw_sensor_states_[1]));
-  state_interfaces.emplace_back(hardware_interface::StateInterface(sensor_name, "force.z", &hw_sensor_states_[2]));
-  state_interfaces.emplace_back(hardware_interface::StateInterface(sensor_name, "torque.x", &hw_sensor_states_[3]));
-  state_interfaces.emplace_back(hardware_interface::StateInterface(sensor_name, "torque.y", &hw_sensor_states_[4]));
-  state_interfaces.emplace_back(hardware_interface::StateInterface(sensor_name, "torque.z", &hw_sensor_states_[5]));
+
+  // Export Force/Torque sensor interfaces (Predisposition)
+  const std::string sensor_name = "tcp_force_torque_sensor";
+  std::vector<std::string> axes = {"force.x", "force.y", "force.z", "torque.x", "torque.y", "torque.z"};
+  for (size_t i = 0; i < axes.size(); ++i) {
+    state_interfaces.emplace_back(hardware_interface::StateInterface(sensor_name, axes[i], &hw_sensor_states_[i]));
+  }
 
   return state_interfaces;
 }
@@ -68,41 +62,47 @@ std::vector<hardware_interface::StateInterface> HeleneHardwareInterface::export_
 std::vector<hardware_interface::CommandInterface> HeleneHardwareInterface::export_command_interfaces()
 {
   std::vector<hardware_interface::CommandInterface> command_interfaces;
-  for (uint i = 0; i < 6; i++) {
+  
+  // Export POSITION command interface
+  for (size_t i = 0; i < info_.joints.size(); i++) {
     command_interfaces.emplace_back(hardware_interface::CommandInterface(
-      info_.joints[i].name, hardware_interface::HW_IF_VELOCITY, &hw_commands_velocity_[i]));
+      info_.joints[i].name, hardware_interface::HW_IF_POSITION, &hw_commands_position_[i]));
   }
+  
   return command_interfaces;
 }
 
 hardware_interface::return_type HeleneHardwareInterface::read(const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
 {
-  // update internal state from the latest received message
+  // Process incoming subscriber messages
   rclcpp::spin_some(node_);
 
-  // update joint states
-  hw_states_position_[0] = angles_msg_.joint1;
-  hw_states_position_[1] = angles_msg_.joint2;
-  hw_states_position_[2] = angles_msg_.joint3;
-  hw_states_position_[3] = angles_msg_.joint4;
-  hw_states_position_[4] = angles_msg_.joint5;
-  hw_states_position_[5] = angles_msg_.joint6;
+  // Map message states to internal variables
+  hw_states_position_[0] = joint_states_msg_.joint1;
+  hw_states_position_[1] = joint_states_msg_.joint2;
+  hw_states_position_[2] = joint_states_msg_.joint3;
+  hw_states_position_[3] = joint_states_msg_.joint4;
+  hw_states_position_[4] = joint_states_msg_.joint5;
+  hw_states_position_[5] = joint_states_msg_.joint6;
+
+  // Note: If the message includes velocity, map them here to hw_states_velocity_
   
   return hardware_interface::return_type::OK;
-
 }
 
 hardware_interface::return_type HeleneHardwareInterface::write(const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
 {
-  // populate and publish the command message based on the current command values
-  velocity_command_msg_.joint1 = hw_commands_velocity_[0];
-  velocity_command_msg_.joint2 = hw_commands_velocity_[1];
-  velocity_command_msg_.joint3 = hw_commands_velocity_[2];
-  velocity_command_msg_.joint4 = hw_commands_velocity_[3];
-  velocity_command_msg_.joint5 = hw_commands_velocity_[4];
-  velocity_command_msg_.joint6 = hw_commands_velocity_[5];
-  // command logic
-  pub_->publish(velocity_command_msg_);
+  // Populate command message with target values from controllers
+  position_command_msg_.joint1 = hw_commands_position_[0];
+  position_command_msg_.joint2 = hw_commands_position_[1];
+  position_command_msg_.joint3 = hw_commands_position_[2];
+  position_command_msg_.joint4 = hw_commands_position_[3];
+  position_command_msg_.joint5 = hw_commands_position_[4];
+  position_command_msg_.joint6 = hw_commands_position_[5];
+
+  // Publish to the real hardware/firmware
+  pub_->publish(position_command_msg_);
+  
   return hardware_interface::return_type::OK;
 }
 
