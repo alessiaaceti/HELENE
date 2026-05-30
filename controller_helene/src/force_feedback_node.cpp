@@ -32,9 +32,9 @@ public:
         
         // --- 1. Sensor Subscriptions ---
         force_sub_ = this->create_subscription<geometry_msgs::msg::WrenchStamped>(
-            "/helene_force_broadcaster/wrench", 10,
+            "/force_torque_sensor", 10, // QoS: KeepLast(10) for real-time data
             std::bind(&ForceFeedbackNode::force_callback, this, std::placeholders::_1));
-
+        
         joint_sub_ = this->create_subscription<sensor_msgs::msg::JointState>(
             "/joint_states", 10,
             std::bind(&ForceFeedbackNode::joint_state_callback, this, std::placeholders::_1));
@@ -60,14 +60,13 @@ public:
 
         // --- State Machine & Filter Parameters ---
         current_state_ = TaskState::APPROACH;
-        contact_threshold_ = 0.4;
-        hole_drop_threshold_ = 1.0;
+        contact_threshold_ = 10.0; // Newtons, adjust based on expected contact force
+        hole_drop_threshold_ = 3.0; // Newtons, adjust based on expected force drop when hole is found
         first_msg_ = true;
         z_meas_prev_ = 0.0; z_comp_prev_ = 0.0;
         a1_ = 0.993; b0_ = 0.668; b1_ = -0.662; 
-        theta_ = 0.0; omega_ = 2.0; spiral_b_ = 0.005;
-        admittance_gain_ = 0.01; deadzone_ = 1.0;
-        last_time_ = this->now();
+        theta_ = 0.0; omega_ = 2.0; spiral_b_ = 0.01;
+        admittance_gain_ = 0.01; deadzone_ = 1.0;       
 
         RCLCPP_INFO(this->get_logger(), "Node Started. Waiting for URDF file to build the Jacobian...");
     }
@@ -112,24 +111,44 @@ private:
     // --- CALLBACK 3: Force Calculation, State Machine, and Inverse Jacobian ---
     void force_callback(const geometry_msgs::msg::WrenchStamped::SharedPtr msg) {
         if (!kdl_ready_) return; // Wait for kinematics to be ready
+        
+        double fx = msg->wrench.force.x;
+        double fy = msg->wrench.force.y;
+        double z_raw = msg->wrench.force.z;
+        
+        // --- BIAS ACQUISITION ---
+        if (!bias_acquired_) {
+            z_bias_ += z_raw;
+            bias_count_++;
+            if (bias_count_ >= 100) {
+                z_bias_ /= 100.0;
+                bias_acquired_ = true;
+                RCLCPP_INFO(this->get_logger(), "BIAS Acquired. Bias Z = %.2f", z_bias_);
+            }
+            return; // Don't proceed until bias is acquired
+        }
+
+        // --- 1. FORCE PROCESSING: Bias Removal + Creep Filter ---
+        double z_meas = z_raw - z_bias_;
+
+        if (first_msg_) {
+            z_meas_prev_ = z_meas; 
+            z_comp_prev_ = z_meas;
+            last_time_ = this->now();           // Initialize time for the first message
+            state_start_time_ = this->now();    // Initialize state start time
+            first_msg_ = false;
+        }
 
         rclcpp::Time current_time = this->now();
         double dt = (current_time - last_time_).seconds();
         if (dt <= 0.0 || dt > 0.1) {
             dt = 0.01; 
         }
-        last_time_ = current_time;
+        last_time_ = current_time;      
 
-        double fx = msg->wrench.force.x;
-        double fy = msg->wrench.force.y;
-        double z_meas = msg->wrench.force.z; 
-
-        // 1. Creep (Kriechverhalten) Filter
-        if (first_msg_) {
-            z_meas_prev_ = z_meas; z_comp_prev_ = z_meas;
-            first_msg_ = false;
-        }
+        // Creep (Kriechverhalten) Filter
         double z_comp = (a1_ * z_comp_prev_) + (b0_ * z_meas) + (b1_ * z_meas_prev_);
+        RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 500, "Z_RAW: %.3f | Z_FILTERED: %.3f", z_meas, z_comp);
         z_meas_prev_ = z_meas; z_comp_prev_ = z_comp;
 
         // Publish the filtered force for monitoring
@@ -138,14 +157,16 @@ private:
         filtered_force_pub_->publish(filtered_msg);
 
         double vx = 0.0, vy = 0.0, vz = 0.0;
+        double duration = (this->now() - state_start_time_).seconds();
 
         // 2. Logic Machine (Cartesian Velocities)
         switch (current_state_) {
             case TaskState::APPROACH:
                 vz = -0.02; // Descent
-                if (z_comp > contact_threshold_) {
+                if (std::abs(z_comp) > contact_threshold_) {
                     RCLCPP_INFO(this->get_logger(), "Contact! (Fz=%.2f N). Starting SPIRAL.", z_comp);
                     current_state_ = TaskState::SEARCH;
+                    state_start_time_ = this->now();
                 }
                 break;
 
@@ -153,11 +174,14 @@ private:
                 theta_ += omega_ * dt; 
                 vx = spiral_b_ * omega_ * (std::cos(theta_) - theta_ * std::sin(theta_));
                 vy = spiral_b_ * omega_ * (std::sin(theta_) + theta_ * std::cos(theta_));
-                vz = (z_comp - contact_threshold_) * 0.005; 
+                // vz = (z_comp - contact_threshold_) * 0.005; 
+                vz = -0.005; // Slow descent during search
 
-                if (z_comp < hole_drop_threshold_) {
-                    RCLCPP_INFO(this->get_logger(), "Hole Found! (Fz=%.2f N). Starting INSERTION.", z_comp);
+                duration = (this->now() - state_start_time_).seconds();
+                if (duration > 2.0 && std::abs(z_comp) < hole_drop_threshold_) {
+                    RCLCPP_INFO(this->get_logger(), "hole found!");
                     current_state_ = TaskState::INSERTION;
+                    state_start_time_ = this->now();
                 }
                 break;
 
@@ -218,7 +242,11 @@ private:
     std::vector<std::string> joint_names_;
 
     // State Machine Variables
+    rclcpp::Time state_start_time_;
     rclcpp::Time last_time_;
+    double z_bias_ = 0.0;
+    bool bias_acquired_ = false;
+    int bias_count_ = 0;
     TaskState current_state_;
     double contact_threshold_, hole_drop_threshold_;
     bool first_msg_;

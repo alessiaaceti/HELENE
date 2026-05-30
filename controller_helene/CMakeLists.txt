@@ -17,6 +17,8 @@ find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(kdl_parser REQUIRED)
 find_package(orocos_kdl REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(tf2_ros REQUIRED)
 
 # 2. Hardware Interface Library (Keep your existing one)
 add_library(helene_hardware_interface SHARED 
@@ -49,6 +51,8 @@ ament_target_dependencies(force_feedback_node
   sensor_msgs
   kdl_parser
   helene_msgs
+  tf2
+  tf2_ros
 )
 
 # 4. Export plugin description for hardware interface
@@ -75,7 +79,7 @@ install(
 )
 
 install(
-  DIRECTORY config launch
+  DIRECTORY config launch worlds
   DESTINATION share/${PROJECT_NAME}
 )
 
@@ -85,7 +89,7 @@ install(
 )
 
 add_executable(mock_force_sensor src/mock_force_sensor.cpp)
-ament_target_dependencies(mock_force_sensor rclcpp geometry_msgs)
+ament_target_dependencies(mock_force_sensor rclcpp geometry_msgs tf2 tf2_ros)
 
 install(TARGETS
   mock_force_sensor

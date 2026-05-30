@@ -13,9 +13,11 @@ def generate_launch_description():
     pkg_hw_description = get_package_share_directory('hw_description')
     pkg_controller_helene = get_package_share_directory('controller_helene')
     pkg_ros_gz_sim = get_package_share_directory('ros_gz_sim')
+    hole_board_model_path = os.path.join(pkg_hw_description, 'urdf', 'hole_board.urdf')
 
     xacro_file = os.path.join(pkg_hw_description, 'urdf', 'helene_hw.urdf.xacro')
-    use_mock_hardware = 'true'
+    world_file = os.path.join(get_package_share_directory('controller_helene'), 'worlds', 'helene_world.sdf')
+    use_mock_hardware = 'true' # Set to 'true' to use the mock hardware interface, which is compatible with Gazebo. Change to 'false' if you want to use the real hardware interface (not recommended for simulation).
 
     # Correct ROS 2 method: use Command to process xacro dynamically
     robot_description = ParameterValue(
@@ -25,10 +27,9 @@ def generate_launch_description():
 
     # Ignition Gazebo launch
     gazebo = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([
-            os.path.join(get_package_share_directory('ros_gz_sim'), 'launch', 'gz_sim.launch.py')
-        ]),
-        launch_arguments={'gz_args': '-r empty.sdf'}.items(),
+        PythonLaunchDescriptionSource([os.path.join(
+            get_package_share_directory('ros_gz_sim'), 'launch', 'gz_sim.launch.py')]),
+        launch_arguments={'gz_args': f'-r {world_file}'}.items(), # Pass the world file as an argument to Gazebo
     )
 
     # Spawn robot in Ignition
@@ -86,11 +87,26 @@ def generate_launch_description():
         parameters=[{'use_sim_time': True}]
     )
 
+    # spawn hole
+    #spawn_hole_board = Node(
+    #    package='ros_gz_sim',
+    #    executable='create',
+    #    arguments=[
+    #        '-name', 'hole_board',
+    #        '-file', hole_board_model_path,
+    #        '-x', '0.4',
+    #        '-y', '0.0',
+    #        '-z', '0.1',
+    #    ],
+    #    output='screen',
+    #)
+
     return LaunchDescription([
         gazebo,
         robot_state_publisher,
         spawn_entity,
         bridge,
+        #spawn_hole_board,
         # Start with a small delay to give Gazebo time to load the ros2_control plugin
         TimerAction(
             period=3.0,
