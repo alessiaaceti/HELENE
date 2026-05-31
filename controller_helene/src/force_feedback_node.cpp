@@ -162,20 +162,30 @@ private:
         // 2. Logic Machine (Cartesian Velocities)
         switch (current_state_) {
             case TaskState::APPROACH:
-                vz = -0.02; // Descent
-                if (std::abs(z_comp) > contact_threshold_) {
-                    RCLCPP_INFO(this->get_logger(), "Contact! (Fz=%.2f N). Starting SPIRAL.", z_comp);
+            {
+                double nominal_vz = -0.0005; // Descent
+                // Damping factor to slow down as we approach the contact point
+                // The idea is to reduce descent speed as we get closer to the contact threshold, creating a "soft landing" effect
+                double damping_factor = 0.0001; 
+                vz = nominal_vz + (std::abs(z_comp) * damping_factor);
+                
+                // Safety check to prevent aggressive commands if we are above the contact threshold
+                if (vz > 0) vz = 0.0;
+                if (std::abs(z_meas) > contact_threshold_) {
+                    RCLCPP_INFO(this->get_logger(), "Contact! (Fz=%.2f N). Starting SPIRAL.", z_meas);
+                    vx = 0.0; vy = 0.0; vz = 0.0; // Stop descent immediately on contact
                     current_state_ = TaskState::SEARCH;
                     state_start_time_ = this->now();
                 }
-                break;
+            }
+            break;
 
             case TaskState::SEARCH:
                 theta_ += omega_ * dt; 
                 vx = spiral_b_ * omega_ * (std::cos(theta_) - theta_ * std::sin(theta_));
                 vy = spiral_b_ * omega_ * (std::sin(theta_) + theta_ * std::cos(theta_));
-                // vz = (z_comp - contact_threshold_) * 0.005; 
-                vz = -0.005; // Slow descent during search
+                // As we spiral, we also want to maintain a gentle downward force to ensure we stay in contact with the surface
+                vz = (std::abs(z_comp) - contact_threshold_) * 0.001;
 
                 duration = (this->now() - state_start_time_).seconds();
                 if (duration > 2.0 && std::abs(z_comp) < hole_drop_threshold_) {
@@ -186,7 +196,7 @@ private:
                 break;
 
             case TaskState::INSERTION:
-                vz = -0.02; 
+                vz = -0.002; 
                 if (std::abs(fx) > deadzone_) vx = fx * admittance_gain_;
                 if (std::abs(fy) > deadzone_) vy = fy * admittance_gain_;
                 break;
