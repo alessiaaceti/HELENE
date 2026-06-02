@@ -1,0 +1,35 @@
+/**:
+  ros__parameters:
+    moveit_servo:
+      use_gazebo: false
+      status_topic: "~/status"
+      
+      # Incoming command topics
+      cartesian_command_in_topic: "~/delta_twist_cmds" 
+      joint_command_in_topic: "~/delta_joint_cmds"     
+      
+      # Command output matching your exact controller configuration
+      command_out_topic: "/helene_trajectory_controller/joint_trajectory" 
+      command_out_type: "trajectory_msgs/JointTrajectory"
+      
+      publish_period: 0.01                
+      incoming_command_timeout: 0.1       
+      
+      # Robot Frames & Groups 
+      move_group_name: "helene_arm"       
+      planning_frame: "base_link"         
+      ee_frame_name: "axis_6"  
+      robot_link_command_frame: "base_link"
+      
+      # Joint limits and scaling
+      linear_scale: 0.4
+      rotational_scale: 0.8
+      joint_scale: 0.5
+      
+      # Safety Thresholds
+      check_collisions: true
+      collision_check_rate: 10.0
+      self_collision_proximity_threshold: 0.01
+      scene_collision_proximity_threshold: 0.02
+      lower_singularity_threshold:  17.0
+      hard_stop_singularity_threshold: 30.0

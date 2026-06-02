@@ -20,9 +20,20 @@
       <pose>0.43 0.03 0.025 0 0 0</pose> 
       
       <link name="board_link">
+        
         <collision name="col_left">
           <pose>0 0.11 0 0 0 0</pose>
           <geometry><box><size>0.4 0.18 0.05</size></box></geometry>
+          <surface>
+            <contact>
+              <ode>
+                <kp>50000.0</kp>
+                <kd>50.0</kd>
+                <max_vel>0.01</max_vel>
+                <min_depth>0.001</min_depth>
+              </ode>
+            </contact>
+          </surface>
         </collision>
         <visual name="vis_left">
           <pose>0 0.11 0 0 0 0</pose>
@@ -33,6 +44,16 @@
         <collision name="col_right">
           <pose>0 -0.11 0 0 0 0</pose>
           <geometry><box><size>0.4 0.18 0.05</size></box></geometry>
+          <surface>
+            <contact>
+              <ode>
+                <kp>50000.0</kp>
+                <kd>50.0</kd>
+                <max_vel>0.01</max_vel>
+                <min_depth>0.001</min_depth>
+              </ode>
+            </contact>
+          </surface>
         </collision>
         <visual name="vis_right">
           <pose>0 -0.11 0 0 0 0</pose>
@@ -43,6 +64,16 @@
         <collision name="col_front">
           <pose>0.11 0 0 0 0 0</pose>
           <geometry><box><size>0.18 0.04 0.05</size></box></geometry>
+          <surface>
+            <contact>
+              <ode>
+                <kp>50000.0</kp>
+                <kd>50.0</kd>
+                <max_vel>0.01</max_vel>
+                <min_depth>0.001</min_depth>
+              </ode>
+            </contact>
+          </surface>
         </collision>
         <visual name="vis_front">
           <pose>0.11 0 0 0 0 0</pose>
@@ -53,6 +84,16 @@
         <collision name="col_back">
           <pose>-0.11 0 0 0 0 0</pose>
           <geometry><box><size>0.18 0.04 0.05</size></box></geometry>
+          <surface>
+            <contact>
+              <ode>
+                <kp>50000.0</kp>
+                <kd>50.0</kd>
+                <max_vel>0.01</max_vel>
+                <min_depth>0.001</min_depth>
+              </ode>
+            </contact>
+          </surface>
         </collision>
         <visual name="vis_back">
           <pose>-0.11 0 0 0 0 0</pose>

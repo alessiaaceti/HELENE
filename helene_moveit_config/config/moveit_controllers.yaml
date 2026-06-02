@@ -1,0 +1,20 @@
+moveit_model_capabilities:
+  data:
+    - name: MoveGroupFollowJointTrajectoryExecutionCapability
+      type: move_group::MoveGroupFollowJointTrajectoryExecutionCapability
+moveit_controller_manager: moveit_simple_controller_manager/MoveItSimpleControllerManager
+
+controller_names:
+  - helene_trajectory_controller
+
+helene_trajectory_controller:
+  type: FollowJointTrajectory
+  action_ns: follow_joint_trajectory
+  default: true
+  joints:
+    - q1
+    - q2
+    - q3
+    - q4
+    - q5
+    - q6
