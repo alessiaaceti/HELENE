@@ -67,13 +67,14 @@ def generate_launch_description():
 
     # Controllers start ONLY AFTER joint_state_broadcaster is successfully loaded
     # This prevents race conditions during startup
-    load_velocity_controller = RegisterEventHandler(
+    # Controllers start ONLY AFTER joint_state_broadcaster is successfully loaded
+    load_trajectory_controller = RegisterEventHandler(
         event_handler=OnProcessExit(
             target_action=joint_state_broadcaster,
             on_exit=[Node(
                 package="controller_manager",
                 executable="spawner",
-                arguments=["helene_velocity_controller"],
+                arguments=["helene_trajectory_controller"], # <-- Switched to the trajectory controller
                 parameters=[{'use_sim_time': True}]
             )],
         )
@@ -114,7 +115,7 @@ def generate_launch_description():
         ),
         
         # This will automatically trigger when joint_state_broadcaster exits its spawning phase
-        load_velocity_controller,
+        load_trajectory_controller,
         
         # Ensure force_feedback starts after all controllers are up and running
         TimerAction(

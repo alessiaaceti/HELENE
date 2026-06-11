@@ -26,7 +26,7 @@ def generate_launch_description():
         "servo_params.yaml",
     )
     
-    # Standalone MoveIt Servo Node
+    # 1. Standalone MoveIt Servo Node
     servo_node = Node(
         package="moveit_servo",
         executable="servo_node_main",
@@ -36,8 +36,35 @@ def generate_launch_description():
             moveit_config.robot_description,
             moveit_config.robot_description_semantic,
             moveit_config.robot_description_kinematics,
+            {'use_sim_time': True}
         ],
         output="screen",
     )
 
-    return LaunchDescription([servo_node])
+    # 2. Joystick Driver Node (Reads raw inputs from the physical controller)
+    joy_node = Node(
+        package='joy',
+        executable='joy_node',
+        name='joy_node',
+        output='screen'
+    )
+
+    # 3. Helene Joystick Teleop Node (Translates joystick inputs into Twist/Joint commands for MoveIt Servo)
+    teleop_node = Node(
+        package='controller_helene',
+        executable='helene_joystick_teleop',
+        name='helene_joystick_teleop',
+        output='screen',
+        parameters=[{
+            'frame_id': 'base_link', 
+            'linear_scale': 0.15,
+            'use_sim_time': True # Aligned with servo_node if running in simulation
+        }]
+    )
+
+    # Return the launch description, starting the 3 core nodes in parallel
+    return LaunchDescription([
+        servo_node,
+        joy_node,
+        teleop_node
+    ])

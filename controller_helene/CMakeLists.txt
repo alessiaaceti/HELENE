@@ -5,7 +5,9 @@ if(NOT CMAKE_CXX_STANDARD)
   set(CMAKE_CXX_STANDARD 17)
 endif()
 
+# ==========================================
 # 1. Find Dependencies
+# ==========================================
 find_package(ament_cmake REQUIRED)
 find_package(hardware_interface REQUIRED)
 find_package(pluginlib REQUIRED)
@@ -20,7 +22,9 @@ find_package(orocos_kdl REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 
-# 2. Hardware Interface Library (Keep your existing one)
+# ==========================================
+# 2. Hardware Interface Library
+# ==========================================
 add_library(helene_hardware_interface SHARED 
   src/helene_hardware_interface.cpp
 )
@@ -39,10 +43,12 @@ ament_target_dependencies(helene_hardware_interface
   helene_msgs
 )
 
-# 3. Force Feedback Executable (Add the new C++ node)
-add_executable(force_feedback_node src/force_feedback_node.cpp)
+# ==========================================
+# 3. Executables (Nodes)
+# ==========================================
 
-# Link KDL and other dependencies to the node
+# --- Force Feedback Node ---
+add_executable(force_feedback_node src/force_feedback_node.cpp)
 target_include_directories(force_feedback_node PRIVATE ${orocos_kdl_INCLUDE_DIRS})
 ament_target_dependencies(force_feedback_node
   rclcpp
@@ -55,24 +61,45 @@ ament_target_dependencies(force_feedback_node
   tf2_ros
 )
 
-# 4. Export plugin description for hardware interface
+# --- Mock Force Sensor ---
+add_executable(mock_force_sensor src/mock_force_sensor.cpp)
+ament_target_dependencies(mock_force_sensor rclcpp geometry_msgs tf2 tf2_ros)
+
+# --- Helene Joystick Teleop ---
+add_executable(helene_joystick_teleop src/helene_joystick_teleop.cpp)
+ament_target_dependencies(helene_joystick_teleop rclcpp sensor_msgs geometry_msgs)
+
+# --- Helene Force Servo Teleop ---
+add_executable(helene_force_servo_teleop src/helene_force_servo_teleop.cpp)
+ament_target_dependencies(helene_force_servo_teleop rclcpp geometry_msgs std_msgs)
+
+# ==========================================
+# 4. Plugins Export
+# ==========================================
 pluginlib_export_plugin_description_file(hardware_interface helene_hardware.xml)
 
-# 5. Install targets
-# Install the Hardware Interface Library
+# ==========================================
+# 5. Install Targets
+# ==========================================
+
+# Install Hardware Interface Library
 install(
   TARGETS helene_hardware_interface
   EXPORT export_helene_hardware_interface
-  #HAS_LIBRARY_DESTINATION
   DESTINATION lib
 )
 
-# Install the Node Executable (THIS IS THE FIX)
+# Install Node Executables
 install(
-  TARGETS force_feedback_node
+  TARGETS 
+    force_feedback_node
+    mock_force_sensor
+    helene_joystick_teleop
+    helene_force_servo_teleop
   DESTINATION lib/${PROJECT_NAME}
 )
 
+# Install Directories & Files
 install(
   DIRECTORY include/
   DESTINATION include/${PROJECT_NAME}
@@ -88,12 +115,7 @@ install(
   DESTINATION share/${PROJECT_NAME}
 )
 
-add_executable(mock_force_sensor src/mock_force_sensor.cpp)
-ament_target_dependencies(mock_force_sensor rclcpp geometry_msgs tf2 tf2_ros)
-
-install(TARGETS
-  mock_force_sensor
-  DESTINATION lib/${PROJECT_NAME}
-)
-
+# ==========================================
+# 6. Ament Package
+# ==========================================
 ament_package()

@@ -1,0 +1,18 @@
+planning_plugins:
+  - ompl_interface/OMPLPlanner
+request_adapters:
+  - default_planning_request_adapters/AddTimeOptimalParameterization
+  - default_planning_request_adapters/ResolveConstraintFrames
+  - default_planning_request_adapters/FixWorkspaceBounds
+  - default_planning_request_adapters/FixStartStateBounds
+  - default_planning_request_adapters/FixStartStateCollision
+  - default_planning_request_adapters/FixStartStatePathConstraints
+helene_arm:
+  planner_configs:
+    - RRTConnectkConfigDefault
+  projection_evaluator: joints(q1,q2)
+  longest_valid_segment_fraction: 0.005
+
+RRTConnectkConfigDefault:
+  type: geometric::RRTConnect
+  range: 0.0  # Max motion step size

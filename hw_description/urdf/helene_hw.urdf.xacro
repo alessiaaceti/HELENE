@@ -159,7 +159,7 @@
   <gazebo reference="q7">
     <preserveFixedJoint>true</preserveFixedJoint>
     
-    <sensor name="force_torque" type="force_torque">
+    <sensor name="tcp_force_torque_sensor" type="force_torque">
       <always_on>true</always_on>
       <update_rate>500</update_rate>
       <topic>/force_torque_sensor</topic>
@@ -172,10 +172,8 @@
 
   <gazebo reference="axis_6">
     <material>Gazebo/Grey</material>
-    
     <mu1>0.1</mu1>
     <mu2>0.1</mu2>
-    
     <kp>50000.0</kp>
     <kd>50.0</kd>
     <maxVel>0.01</maxVel>

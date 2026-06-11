@@ -37,8 +37,7 @@
         <joint name="q5" value="0"/>
         <joint name="q6" value="0"/>
     </group_state>
-    <!--END EFFECTOR: Purpose: Represent information about an end effector.-->
-    <end_effector name="gripper" parent_link="axis_6" group="helene_arm" parent_group="helene_arm"/>
+
     <!--DISABLE COLLISIONS: By default it is assumed that any link of the robot could potentially come into collision with any other link in the robot. This tag disables collision checking between a specified pair of links. -->
     <disable_collisions link1="axis_0" link2="axis_1" reason="Adjacent"/>
     <disable_collisions link1="axis_0" link2="axis_2" reason="Never"/>
