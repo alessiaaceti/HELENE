@@ -121,9 +121,23 @@ def generate_launch_description():
     robot_description_kinematics = {'robot_description_kinematics': kinematics_yaml if kinematics_yaml else {}}
 
     planning_pipelines_config = {
-        'planning_plugin': 'ompl_interface/OMPLPlanner',
         'planning_pipelines': ['ompl'],
         'default_planning_pipeline': 'ompl',
+        'ompl': {
+            'planning_plugin': 'ompl_interface/OMPLPlanner',
+            'request_adapters': 'default_planner_request_adapters/AddTimeOptimalParameterization '
+                                'default_planner_request_adapters/FixWorkspaceBounds '
+                                'default_planner_request_adapters/FixStartStateBounds '
+                                'default_planner_request_adapters/FixStartStateCollision '
+                                'default_planner_request_adapters/FixStartStatePathConstraints',
+            'start_state_max_bounds_error': 0.1,
+            # RRTConnect specific parameters
+            'planner_configs': ['RRTConnectkConfigDefault'],
+            'RRTConnectkConfigDefault': {
+                'type': 'geometric::RRTConnect',
+                'range': 0.0,  # Default range, can be tuned for performance
+            }
+        }
     }
 
     moveit_controllers_config = {
