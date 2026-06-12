@@ -43,6 +43,11 @@ ament_target_dependencies(helene_hardware_interface
   helene_msgs
 )
 
+# --- MODIFICATO QUI: Dipendenza corretta per la libreria ---
+if(TARGET helene_msgs__rosidl_typesupport_cpp)
+  add_dependencies(helene_hardware_interface helene_msgs__rosidl_typesupport_cpp)
+endif()
+
 # ==========================================
 # 3. Executables (Nodes)
 # ==========================================
@@ -60,6 +65,11 @@ ament_target_dependencies(force_feedback_node
   tf2
   tf2_ros
 )
+
+# --- MODIFICATO QUI: Dipendenza corretta per il nodo ---
+if(TARGET helene_msgs__rosidl_typesupport_cpp)
+  add_dependencies(force_feedback_node helene_msgs__rosidl_typesupport_cpp)
+endif()
 
 # --- Mock Force Sensor ---
 add_executable(mock_force_sensor src/mock_force_sensor.cpp)

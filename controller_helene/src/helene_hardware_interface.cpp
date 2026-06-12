@@ -24,15 +24,27 @@ hardware_interface::CallbackReturn HeleneHardwareInterface::on_init(const hardwa
   // Create internal node for ROS 2 communication
   node_ = std::make_shared<rclcpp::Node>("helene_hw_internal_node");
 
-  // Publisher for position commands sent to the robot
-  pub_ = node_->create_publisher<helene_msgs::msg::JointPosition>("hardware_commands", 10);
-  
-  // Subscriber for current robot states
-  sub_ = node_->create_subscription<helene_msgs::msg::JointPosition>(
-    "hardware_states", 10,
-    [this](const helene_msgs::msg::JointPosition::SharedPtr msg) {
-      this->joint_states_msg_ = *msg;
-    });
+  pubs_.resize(6);
+  subs_.resize(6);
+
+  // Inizializza i publisher e subscriber dinamici per ogni giunto micro-ROS
+  for (size_t i = 0; i < 6; i++) {
+    std::string joint_num = std::to_string(i + 1);
+    
+    // Cambia qui i nomi dei topic se il tuo firmware ESP32 usa stringhe leggermente diverse
+    std::string pub_topic = "joint" + joint_num + "/target_velocity";
+    std::string sub_topic = "joint" + joint_num + "/actual_angle";
+
+    // Allocazione del Publisher
+    pubs_[i] = node_->create_publisher<std_msgs::msg::Float32>(pub_topic, 10);
+    
+    // Allocazione del Subscriber usando una lambda function catturando l'indice del giunto [i]
+    subs_[i] = node_->create_subscription<std_msgs::msg::Float32>(
+      sub_topic, 10,
+      [this, i](const std_msgs::msg::Float32::SharedPtr msg) {
+        this->hw_states_position_[i] = msg->data;
+      });
+  }
 
   return hardware_interface::CallbackReturn::SUCCESS;
 }
@@ -40,69 +52,45 @@ hardware_interface::CallbackReturn HeleneHardwareInterface::on_init(const hardwa
 std::vector<hardware_interface::StateInterface> HeleneHardwareInterface::export_state_interfaces()
 {
   std::vector<hardware_interface::StateInterface> state_interfaces;
-  
-  // Export Position and Velocity state interfaces for each joint
   for (size_t i = 0; i < info_.joints.size(); i++) {
     state_interfaces.emplace_back(hardware_interface::StateInterface(
       info_.joints[i].name, hardware_interface::HW_IF_POSITION, &hw_states_position_[i]));
     state_interfaces.emplace_back(hardware_interface::StateInterface(
       info_.joints[i].name, hardware_interface::HW_IF_VELOCITY, &hw_states_velocity_[i]));
   }
-
-  // Export Force/Torque sensor interfaces (Predisposition)
   const std::string sensor_name = "tcp_force_torque_sensor";
   std::vector<std::string> axes = {"force.x", "force.y", "force.z", "torque.x", "torque.y", "torque.z"};
   for (size_t i = 0; i < axes.size(); ++i) {
     state_interfaces.emplace_back(hardware_interface::StateInterface(sensor_name, axes[i], &hw_sensor_states_[i]));
   }
-
   return state_interfaces;
 }
 
 std::vector<hardware_interface::CommandInterface> HeleneHardwareInterface::export_command_interfaces()
 {
   std::vector<hardware_interface::CommandInterface> command_interfaces;
-  
-  // Export POSITION command interface
   for (size_t i = 0; i < info_.joints.size(); i++) {
     command_interfaces.emplace_back(hardware_interface::CommandInterface(
       info_.joints[i].name, hardware_interface::HW_IF_POSITION, &hw_commands_position_[i]));
   }
-  
   return command_interfaces;
 }
 
 hardware_interface::return_type HeleneHardwareInterface::read(const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
 {
-  // Process incoming subscriber messages
+  // Spara i callback in coda per aggiornare hw_states_position_ dai sensori ESP32
   rclcpp::spin_some(node_);
-
-  // Map message states to internal variables
-  hw_states_position_[0] = joint_states_msg_.joint1;
-  hw_states_position_[1] = joint_states_msg_.joint2;
-  hw_states_position_[2] = joint_states_msg_.joint3;
-  hw_states_position_[3] = joint_states_msg_.joint4;
-  hw_states_position_[4] = joint_states_msg_.joint5;
-  hw_states_position_[5] = joint_states_msg_.joint6;
-
-  // Note: If the message includes velocity, map them here to hw_states_velocity_
-  
   return hardware_interface::return_type::OK;
 }
 
 hardware_interface::return_type HeleneHardwareInterface::write(const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
 {
-  // Populate command message with target values from controllers
-  position_command_msg_.joint1 = hw_commands_position_[0];
-  position_command_msg_.joint2 = hw_commands_position_[1];
-  position_command_msg_.joint3 = hw_commands_position_[2];
-  position_command_msg_.joint4 = hw_commands_position_[3];
-  position_command_msg_.joint5 = hw_commands_position_[4];
-  position_command_msg_.joint6 = hw_commands_position_[5];
-
-  // Publish to the real hardware/firmware
-  pub_->publish(position_command_msg_);
-  
+  // Invia i comandi calcolati da MoveIt direttamente a ciascun motore
+  for (size_t i = 0; i < 6; i++) {
+    std_msgs::msg::Float32 command_msg;
+    command_msg.data = hw_commands_position_[i];
+    pubs_[i]->publish(command_msg);
+  }
   return hardware_interface::return_type::OK;
 }
 

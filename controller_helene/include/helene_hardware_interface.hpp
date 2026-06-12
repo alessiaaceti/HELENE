@@ -6,7 +6,7 @@
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
 #include "hardware_interface/hardware_info.hpp"
 #include "rclcpp/rclcpp.hpp"
-#include "helene_msgs/msg/joint_position.hpp"
+#include "std_msgs/msg/float32.hpp"
 
 #include <vector>
 #include <array>
@@ -16,14 +16,11 @@ namespace controller_helene
 class HeleneHardwareInterface : public hardware_interface::SystemInterface
 {
 public:
-  // Lifecycle methods for the hardware interface
   hardware_interface::CallbackReturn on_init(const hardware_interface::HardwareInfo & info) override;
   
-  // Methods to export interfaces to the Resource Manager
   std::vector<hardware_interface::StateInterface> export_state_interfaces() override;
   std::vector<hardware_interface::CommandInterface> export_command_interfaces() override;
   
-  // Real-time read and write loops
   hardware_interface::return_type read(const rclcpp::Time & time, const rclcpp::Duration & period) override;
   hardware_interface::return_type write(const rclcpp::Time & time, const rclcpp::Duration & period) override;
 
@@ -33,17 +30,13 @@ private:
   std::vector<double> hw_states_position_;
   std::vector<double> hw_states_velocity_;
 
-  // Buffer for 6-axis force-torque sensor data (FX, FY, FZ, TX, TY, TZ)
+  // Buffer for 6-axis force-torque sensor data
   std::array<double, 6> hw_sensor_states_; 
 
-  // ROS 2 message containers
-  helene_msgs::msg::JointPosition joint_states_msg_;
-  helene_msgs::msg::JointPosition position_command_msg_;
-
-  // ROS 2 communication infrastructure
+  // ROS 2 communication infrastructure (Array/Vector per i 6 giunti)
   rclcpp::Node::SharedPtr node_;
-  rclcpp::Publisher<helene_msgs::msg::JointPosition>::SharedPtr pub_;
-  rclcpp::Subscription<helene_msgs::msg::JointPosition>::SharedPtr sub_;
+  std::vector<rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr> pubs_;
+  std::vector<rclcpp::Subscription<std_msgs::msg::Float32>::SharedPtr> subs_;
 };
 } 
 

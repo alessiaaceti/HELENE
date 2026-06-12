@@ -2,7 +2,7 @@
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="helene">
 
   <xacro:property name="mesh_scale" value="0.001 0.001 0.001" />
-  <xacro:arg name="use_mock_hardware" default="true" />
+  <xacro:arg name="use_mock_hardware" default="false" />
   
   <xacro:macro name="create_link" params="link_name mesh_file mass ixx iyy izz">
     <link name="${link_name}">
@@ -80,7 +80,7 @@
 
   <joint name="q3" type="revolute">
     <parent link="axis_1"/><child link="axis_2"/>
-    <origin xyz="0 -0.200 0" rpy="0 0 3.141"/>
+    <origin xyz="0 -0.200 0" rpy="0 0 4.712"/>
     <axis xyz="0 0 1"/>
     <limit effort="1000.0" lower="0" upper="2.7925" velocity="5" />
   </joint>
@@ -125,7 +125,7 @@
     <xacro:macro name="configure_joint" params="joint_name">
       <joint name="${joint_name}">
         <command_interface name="position"/>
-        <command_interface name="velocity"/>
+        <!-- <command_interface name="velocity"/> -->
         
         <state_interface name="position">
           <param name="initial_value">0.0</param>

@@ -65,12 +65,12 @@ helene_trajectory_controller:
     constraints:
       stopped_velocity_tolerance: 0.01
       goal_time: 0.0
-      q1: { trajectory: 0.1, goal: 0.1 }
-      q2: { trajectory: 0.1, goal: 0.1 }
-      q3: { trajectory: 0.1, goal: 0.1 }
-      q4: { trajectory: 0.1, goal: 0.1 }
-      q5: { trajectory: 0.1, goal: 0.1 }
-      q6: { trajectory: 0.1, goal: 0.1 }
+      q1: { trajectory: 0.0, goal: 0.0 }
+      q2: { trajectory: 0.0, goal: 0.0 }
+      q3: { trajectory: 0.0, goal: 0.0 }
+      q4: { trajectory: 0.0, goal: 0.0 }
+      q5: { trajectory: 0.0, goal: 0.0 }
+      q6: { trajectory: 0.0, goal: 0.0 }
 
 joint_state_broadcaster:
   ros__parameters:
