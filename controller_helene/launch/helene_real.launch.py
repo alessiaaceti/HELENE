@@ -28,16 +28,16 @@ def generate_launch_description():
     with open(srdf_file, 'r') as f:
         robot_description_semantic_config = f.read()
     
-    # PARAMETRI PER IL ROBOT REALE
+    # Real robot parameters
     sim_time_param = {'use_sim_time': False}
-    use_mock_hardware = 'false' # Attiva il driver hardware C++ reale
+    use_mock_hardware = 'false' # Activate real hardware mode in xacro with this parameter
 
     robot_description = ParameterValue(
         Command(['xacro ', xacro_file, ' use_mock_hardware:=', use_mock_hardware]),
         value_type=str
     )
 
-    # 1. Controller Manager Hardware (Sostituisce Gazebo per il robot fisico)
+    # 1. Controller Manager Hardware
     controller_manager_yaml = os.path.join(pkg_controller_helene, 'config', 'helene_controllers.yaml')
     ros2_control_node = Node(
         package="controller_manager",
@@ -54,7 +54,7 @@ def generate_launch_description():
         parameters=[{'robot_description': robot_description}, sim_time_param]
     )
 
-    # --- Configurazione MoveIt 2 (Preservata dal tuo file originale) ---
+    # --- MoveIt 2 Configuration ---
     kinematics_yaml = load_yaml('helene_moveit_config', 'config/kinematics.yaml')
     joint_limits_yaml = load_yaml('helene_moveit_config', 'config/joint_limits.yaml')
     ompl_yaml = load_yaml('helene_moveit_config', 'config/ompl_planning.yaml')
@@ -153,7 +153,7 @@ def generate_launch_description():
         arguments=['-d', os.path.join(pkg_helene_moveit_config, 'config', 'moveit.rviz')],
     )
 
-    # 5. Spawner del Joint State Broadcaster
+    # 5. Joint State Broadcaster Spawner
     joint_state_broadcaster = Node(
         package="controller_manager",
         executable="spawner",
@@ -161,7 +161,7 @@ def generate_launch_description():
         parameters=[sim_time_param]
     )
 
-    # 6. Event Handler per caricare i controller dopo il Broadcaster
+    # 6. Event Handler to Load Controllers After Joint State Broadcaster
     load_controllers = RegisterEventHandler(
         event_handler=OnProcessExit(
             target_action=joint_state_broadcaster,
@@ -198,20 +198,29 @@ def generate_launch_description():
         ],
     )
 
+    # 8. Python Serial Bridge 
+    serial_bridge_node = Node(
+        package='controller_helene', 
+        executable='helene_serial_bridge.py',
+        name='helene_serial_bridge_node',
+        output='screen'
+    )
+
     return LaunchDescription([
         ros2_control_node,
         robot_state_publisher,
         move_group_node,
         rviz2_node,
+        serial_bridge_node,  
         
-        # Avvio controllori con un piccolo delay per stabilità hardware
+        # Load Joint State Broadcaster first, then the rest of the controllers after a delay
         TimerAction(
             period=2.0,
             actions=[joint_state_broadcaster]
         ),
         load_controllers,
         
-        # Delay di sicurezza per il Servo Node
+        # Security delay 
         TimerAction(
             period=5.0, 
             actions=[servo_node]
