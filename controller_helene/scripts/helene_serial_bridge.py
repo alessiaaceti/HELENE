@@ -68,10 +68,10 @@ class HeleneSerialBridge(Node):
     def trajectory_state_cb(self, msg):
         if len(msg.desired.velocities) >= 6:
             for i in range(6):
-                # Moltiplicatore di velocità: MoveIt manda radianti/secondo (es: 0.5)
-                # Moltiplichiamo per 100.0 (o un altro valore) per scalarlo per l'ESP32
+                # velocity multiplicator 
+                # multiply rad/s by 11287 to get motor command in ticks/s (assuming 1 rad/s = 11287 ticks/s for the specific motor/encoder setup)
                 velocita_rad_s = msg.desired.velocities[i]
-                velocita_motore = velocita_rad_s * 1000.0 
+                velocita_motore = velocita_rad_s * 11287.0
                 
                 self.target_velocities[i] = velocita_motore
 
