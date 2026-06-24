@@ -30,7 +30,6 @@ helene_velocity_controller:
 
 helene_trajectory_controller:
   ros__parameters:
-    # these names must match the ones in the URDF
     joints:
       - q1
       - q2
@@ -39,19 +38,18 @@ helene_trajectory_controller:
       - q5
       - q6
 
-    # command interfaces that the controller will accept
+    # These interfaces must match the command_interfaces defined in the URDF for each joint
     command_interfaces:
       - position
+      - velocity
 
-    # state interfaces that the controller will read from the hardware interface
     state_interfaces:
       - position
       - velocity
 
-    # controller parameters (these can be tuned as needed) -> 
-    state_publish_rate: 1000.0     # !!!!
+    state_publish_rate: 1000.0
     action_monitor_rate: 10.0
-    allow_partial_joints_goal: false
+    allow_partial_joints_goal: true   # Allows sending goals that only specify a subset of joints, which can be useful for testing or if you have multiple controllers managing different joints. Set to false if you want to enforce that all joints must be specified in every goal.
     open_loop_control: false
 
     gains:
@@ -62,15 +60,16 @@ helene_trajectory_controller:
       q5: {p: 500.0, i: 1.0, d: 5.0}
       q6: {p: 100.0, i: 1.0, d: 1.0}
 
+    # Constraints for the trajectory controller
     constraints:
-      stopped_velocity_tolerance: 0.01
+      stopped_velocity_tolerance: 0.05
       goal_time: 0.0
-      q1: { trajectory: 0.0, goal: 0.0 }
-      q2: { trajectory: 0.0, goal: 0.0 }
-      q3: { trajectory: 0.0, goal: 0.0 }
-      q4: { trajectory: 0.0, goal: 0.0 }
-      q5: { trajectory: 0.0, goal: 0.0 }
-      q6: { trajectory: 0.0, goal: 0.0 }
+      q1: { trajectory: 0.2, goal: 0.1 }
+      q2: { trajectory: 0.2, goal: 0.1 }
+      q3: { trajectory: 0.2, goal: 0.1 }
+      q4: { trajectory: 0.2, goal: 0.1 }
+      q5: { trajectory: 0.2, goal: 0.1 }
+      q6: { trajectory: 0.2, goal: 0.1 }
 
 joint_state_broadcaster:
   ros__parameters:

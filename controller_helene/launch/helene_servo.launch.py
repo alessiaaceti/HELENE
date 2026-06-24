@@ -1,70 +1,45 @@
 import os
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch_ros.actions import Node
-from ament_index_python.packages import get_package_share_directory
-from moveit_configs_utils import MoveItConfigsBuilder
+import yaml
+import subprocess
 
 def generate_launch_description():
-    # Explicitly find the URDF inside the hw_description package
-    urdf_path = os.path.join(
-        get_package_share_directory("hw_description"),
-        "urdf",
-        "helene_hw.urdf.xacro"
-    )
+    # Trova le directory dei pacchetti dinamicamente
+    hw_desc_pkg = get_package_share_directory('hw_description')
+    moveit_cfg_pkg = get_package_share_directory('helene_moveit_config')
+    controller_pkg = get_package_share_directory('controller_helene')
 
-    # Build MoveIt configurations
-    moveit_config = (
-        MoveItConfigsBuilder("helene", package_name="helene_moveit_config")
-        .robot_description(file_path=urdf_path) # Pass the absolute path here
-        .to_moveit_configs()
-    )
-
-    # Fetch your servo parameter file
-    servo_yaml = os.path.join(
-        get_package_share_directory("controller_helene"),
-        "config",
-        "servo_params.yaml",
-    )
+    xacro_path = os.path.join(hw_desc_pkg, 'urdf', 'helene_hw.urdf.xacro')
+    srdf_path = os.path.join(moveit_cfg_pkg, 'config', 'helene.srdf')
+    kinematics_path = os.path.join(moveit_cfg_pkg, 'config', 'kinematics.yaml')
+    servo_yaml_path = os.path.join(controller_pkg, 'config', 'servo_params.yaml')
     
-    # 1. Standalone MoveIt Servo Node
+    # Xacro
+    robot_description_config = subprocess.check_output(['xacro', xacro_path]).decode('utf-8')
+    robot_description = {"robot_description": robot_description_config}
+
+    # SRDF
+    with open(srdf_path, 'r') as f:
+        robot_description_semantic = {"robot_description_semantic": f.read()}
+
+    # Kinematics
+    with open(kinematics_path, 'r') as file:
+        kinematics_yaml = yaml.safe_load(file)
+    robot_description_kinematics = {"robot_description_kinematics": kinematics_yaml}
+
     servo_node = Node(
-        package="moveit_servo",
-        executable="servo_node_main",
-        name="servo_node",
-        parameters=[
-            servo_yaml,
-            moveit_config.robot_description,
-            moveit_config.robot_description_semantic,
-            moveit_config.robot_description_kinematics,
-            {'use_sim_time': True}
-        ],
-        output="screen",
-    )
-
-    # 2. Joystick Driver Node (Reads raw inputs from the physical controller)
-    joy_node = Node(
-        package='joy',
-        executable='joy_node',
-        name='joy_node',
-        output='screen'
-    )
-
-    # 3. Helene Joystick Teleop Node (Translates joystick inputs into Twist/Joint commands for MoveIt Servo)
-    teleop_node = Node(
-        package='controller_helene',
-        executable='helene_joystick_teleop',
-        name='helene_joystick_teleop',
+        package='moveit_servo',
+        executable='servo_node_main',
         output='screen',
-        parameters=[{
-            'frame_id': 'base_link', 
-            'linear_scale': 0.15,
-            'use_sim_time': True # Aligned with servo_node if running in simulation
-        }]
+        parameters=[
+            robot_description,
+            robot_description_semantic,
+            robot_description_kinematics,
+            servo_yaml_path,
+            {'use_sim_time': True} 
+        ]
     )
 
-    # Return the launch description, starting the 3 core nodes in parallel
-    return LaunchDescription([
-        servo_node,
-        joy_node,
-        teleop_node
-    ])
+    return LaunchDescription([servo_node])

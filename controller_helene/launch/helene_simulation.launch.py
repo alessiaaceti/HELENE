@@ -37,7 +37,7 @@ def generate_launch_description():
     sim_time_param = {'use_sim_time': True}
     
     # Use mock hardware interface for Gazebo compatibility
-    use_mock_hardware = 'true'
+    use_mock_hardware = 'true'  # Set to 'true' if using mock hardware interface
 
     # Process Xacro dynamically to generate robot description
     robot_description = ParameterValue(
@@ -259,6 +259,6 @@ def generate_launch_description():
         # before starting MoveIt Servo and the Teleop Translator node
         TimerAction(
             period=8.0, 
-            actions=[servo_node, helene_force_servo_teleop]
+            actions=[servo_node]  #, helene_force_servo_teleop
         )
     ])

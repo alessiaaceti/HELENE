@@ -131,6 +131,12 @@ install(PROGRAMS
   DESTINATION lib/${PROJECT_NAME}
 )
 
+# Install Python Scripts
+install(PROGRAMS
+  scripts/helene_keyboard_bridge.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 # ==========================================
 # 6. Ament Package
 # ==========================================

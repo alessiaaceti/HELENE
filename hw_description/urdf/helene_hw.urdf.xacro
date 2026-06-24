@@ -80,7 +80,7 @@
 
   <joint name="q3" type="revolute">
     <parent link="axis_1"/><child link="axis_2"/>
-    <origin xyz="0 -0.200 0" rpy="0 0 4.712"/>
+    <origin xyz="0 -0.200 0" rpy="0 0 3.141"/>
     <axis xyz="0 0 1"/>
     <limit effort="1000.0" lower="0" upper="2.7925" velocity="5" />
   </joint>
@@ -109,7 +109,7 @@
   <joint name="q7" type="fixed">
     <parent link="axis_5"/>
     <child link="axis_6"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/> 
+    <origin xyz="0 0 0.05" rpy="0 0 0"/> 
   </joint>
 
   <ros2_control name="HeleneControl" type="system">
@@ -119,13 +119,14 @@
         </xacro:if>
         <xacro:unless value="$(arg use_mock_hardware)">
             <plugin>controller_helene/HeleneHardwareInterface</plugin>
-            <param name="device">/dev/ttyUSB0</param> </xacro:unless>
+            <param name="device">/dev/ttyUSB0</param> 
+        </xacro:unless>
     </hardware>
     
     <xacro:macro name="configure_joint" params="joint_name">
       <joint name="${joint_name}">
         <command_interface name="position"/>
-        <!-- <command_interface name="velocity"/> -->
+        <command_interface name="velocity"/>
         
         <state_interface name="position">
           <param name="initial_value">0.0</param>

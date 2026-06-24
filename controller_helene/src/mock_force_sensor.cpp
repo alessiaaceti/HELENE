@@ -69,7 +69,11 @@ private:
         msg.wrench.force.y = random_noise();
         msg.wrench.force.z = force_z;
 
-        publisher_->publish(msg);
+        rclcpp::QoS qos_profile(10);
+        qos_profile.transient_local();
+
+        publisher_ = this->create_publisher<geometry_msgs::msg::WrenchStamped>(
+            "/helene_force_broadcaster/wrench", qos_profile);
     }
 
     bool simulation_started_ = false;
