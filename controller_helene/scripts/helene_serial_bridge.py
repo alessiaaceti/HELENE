@@ -88,25 +88,31 @@ class HeleneSerialBridge(Node):
                         return
                     
                     data = line.split(',')
-                    if len(data) == 2:
+                    
+                    # Check if we received exactly 6 values
+                    if len(data) == 6:
                         try:
-                            msg_a = Float32(); msg_a.data = float(data[0])
-                            self.pub_angles[0].publish(msg_a)
+                            q1 = float(data[0])
+                            q2 = float(data[1])
+                            q3 = float(data[2])
+                            q4 = float(data[3])
+                            q5 = float(data[4])
+                            q6 = float(data[5])
+
+                            # Publish the angles to the respective topics
+                            self.pub_angles[0].publish(Float32(data=q1))
+                            self.pub_angles[1].publish(Float32(data=q2))
+                            self.pub_angles[2].publish(Float32(data=q3)) # Add 90 degrees (1.5708 radians) to q3 NO
+                            self.pub_angles[3].publish(Float32(data=q4))
+                            self.pub_angles[4].publish(Float32(data=q5))
+                            self.pub_angles[5].publish(Float32(data=q6))
                             
-                            msg_v = Float32(); msg_v.data = float(data[1])
-                            self.pub_velocities[0].publish(msg_v)
-                            
-                            for i in range(1, 6):
-                                msg_fake = Float32(); msg_fake.data = 0.0
-                                self.pub_angles[i].publish(msg_fake)
-                                self.pub_velocities[i].publish(msg_fake)
                         except ValueError: 
                             pass
-                    elif len(data) >= 6: 
-                        pass
                     else:
+                        # Log a warning if the received data does not have exactly 6 values
                         self.get_logger().info(f"[Serial Message]: {line}")
-        except Exception:
+        except Exception as e:
             pass
 
     # --- Serial Writing ---
