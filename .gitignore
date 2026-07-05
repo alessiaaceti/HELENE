@@ -70,3 +70,7 @@ log/
 
 # Local History for Visual Studio Code
 .history/
+
+# PlatformIO temporanei
+helene_electronics/.pio/
+helene_electronics/.vscode/

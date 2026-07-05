@@ -126,10 +126,10 @@ install(
 )
 
 # Install Python Scripts
-install(PROGRAMS
-  scripts/helene_serial_bridge.py
-  DESTINATION lib/${PROJECT_NAME}
-)
+#install(PROGRAMS
+#  scripts/helene_serial_bridge.py
+# DESTINATION lib/${PROJECT_NAME}
+#)
 
 # Install Python Scripts
 install(PROGRAMS

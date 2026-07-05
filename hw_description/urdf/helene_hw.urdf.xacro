@@ -3,6 +3,7 @@
 
   <xacro:property name="mesh_scale" value="0.001 0.001 0.001" />
   <xacro:arg name="use_mock_hardware" default="false" />
+  <xacro:arg name="use_ft_sensor" default="false" />
   
   <xacro:macro name="create_link" params="link_name mesh_file mass ixx iyy izz">
     <link name="${link_name}">
@@ -68,44 +69,40 @@
     <parent link="base_link"/><child link="axis_0"/>
     <origin xyz="0 0 0" rpy="0 0 0"/>
     <axis xyz="0 0 1"/>
-    <limit effort="1000.0" lower="-2.79" upper="2.79" velocity="5" />
-  </joint>
+    <limit effort="1000.0" lower="-2.79" upper="2.79" velocity="0.5" /> </joint>
 
   <joint name="q2" type="revolute">
     <parent link="axis_0"/><child link="axis_1"/>
     <origin xyz="0.02 0 0.145" rpy="-1.571 0 0"/>
     <axis xyz="0 0 1"/>
-    <limit effort="1000.0" lower="-1.83" upper="1.83" velocity="5" />
-  </joint>
+    <limit effort="1000.0" lower="-1.83" upper="1.83" velocity="0.5" /> </joint>
 
   <joint name="q3" type="revolute">
     <parent link="axis_1"/><child link="axis_2"/>
     <origin xyz="0 -0.200 0" rpy="0 0 3.141"/>
     <axis xyz="0 0 1"/>
-    <limit effort="1000.0" lower="0" upper="2.7925" velocity="5" />
-  </joint>
+    <limit effort="1000.0" lower="0" upper="2.7925" velocity="0.5" /> </joint>
 
   <joint name="q4" type="revolute">
     <parent link="axis_2"/><child link="axis_3"/>
     <origin xyz="0 0 0" rpy="-1.571 0 0"/>
     <axis xyz="0 0 1"/>
-    <limit effort="1000.0" lower="-2.9" upper="2.9" velocity="5" />
-  </joint>
+    <limit effort="1000.0" lower="-2.9" upper="2.9" velocity="0.8" /> </joint>
 
   <joint name="q5" type="revolute">
     <parent link="axis_3"/><child link="axis_4"/>
     <origin xyz="0 0 0.177" rpy="1.571 0 0"/>
     <axis xyz="0 0 1"/>
-    <limit effort="1000.0" lower="-2.7" upper="2.7" velocity="5" />
+    <limit effort="1000.0" lower="-2.7" upper="2.7" velocity="0.8" />
   </joint>
 
   <joint name="q6" type="revolute">
     <parent link="axis_4"/><child link="axis_5"/>
     <origin xyz="0 0 0" rpy="-1.571 0 0"/>
     <axis xyz="0 0 1"/>
-    <limit effort="1000.0" lower="-3.141" upper="3.141" velocity="5" />
+    <limit effort="1000.0" lower="-3.141" upper="3.141" velocity="1.0" />
   </joint>
-
+  
   <joint name="q7" type="fixed">
     <parent link="axis_5"/>
     <child link="axis_6"/>
@@ -119,19 +116,17 @@
         </xacro:if>
         <xacro:unless value="$(arg use_mock_hardware)">
             <plugin>controller_helene/HeleneHardwareInterface</plugin>
-            <param name="device">/dev/ttyUSB0</param> 
         </xacro:unless>
     </hardware>
     
     <xacro:macro name="configure_joint" params="joint_name">
       <joint name="${joint_name}">
-        <command_interface name="position"/>
-        <!--<command_interface name="velocity"/>-->
+        <command_interface name="velocity"/>
         
         <state_interface name="position">
           <param name="initial_value">0.0</param>
         </state_interface>
-        <!--<state_interface name="velocity"/>-->
+        <state_interface name="velocity"/>
       </joint>
     </xacro:macro>
 
@@ -141,11 +136,14 @@
     <xacro:configure_joint joint_name="q4"/>
     <xacro:configure_joint joint_name="q5"/>
     <xacro:configure_joint joint_name="q6"/>
+    
+    <xacro:if value="$(arg use_ft_sensor)">
+      <sensor name="tcp_force_torque_sensor">
+        <state_interface name="force.x"/><state_interface name="force.y"/><state_interface name="force.z"/>
+        <state_interface name="torque.x"/><state_interface name="torque.y"/><state_interface name="torque.z"/>
+      </sensor>
+    </xacro:if>
 
-    <sensor name="tcp_force_torque_sensor">
-      <state_interface name="force.x"/><state_interface name="force.y"/><state_interface name="force.z"/>
-      <state_interface name="torque.x"/><state_interface name="torque.y"/><state_interface name="torque.z"/>
-    </sensor>
   </ros2_control>
 
   <gazebo>
@@ -156,20 +154,22 @@
       </ros>
     </plugin>
   </gazebo>
-
-  <gazebo reference="q7">
-    <preserveFixedJoint>true</preserveFixedJoint>
-    
-    <sensor name="tcp_force_torque_sensor" type="force_torque">
-      <always_on>true</always_on>
-      <update_rate>500</update_rate>
-      <topic>/force_torque_sensor</topic>
-      <force_torque>
-        <frame>child</frame>
-        <measure_direction>child_to_parent</measure_direction>
-      </force_torque>
-    </sensor>
-  </gazebo>
+  
+  <xacro:if value="$(arg use_ft_sensor)">
+    <gazebo reference="q7">
+      <preserveFixedJoint>true</preserveFixedJoint>
+      
+      <sensor name="tcp_force_torque_sensor" type="force_torque">
+        <always_on>true</always_on>
+        <update_rate>500</update_rate>
+        <topic>/force_torque_sensor</topic>
+        <force_torque>
+          <frame>child</frame>
+          <measure_direction>child_to_parent</measure_direction>
+        </force_torque>
+      </sensor>
+    </gazebo>
+  </xacro:if>
 
   <gazebo reference="axis_6">
     <material>Gazebo/Grey</material>

@@ -198,12 +198,13 @@ def generate_launch_description():
         ],
     )
 
-    # 8. Python Serial Bridge 
-    serial_bridge_node = Node(
-        package='controller_helene', 
-        executable='helene_serial_bridge.py',
-        name='helene_serial_bridge_node',
-        output='screen'
+    # 8. Micro-ROS Agent Node
+    microros_agent_node = Node(
+        package='micro_ros_agent',
+        executable='micro_ros_agent',
+        name='micro_ros_agent',
+        output='screen',
+        arguments=['serial', '--dev', '/dev/helene_esp', '-b', '460800', '-v6']
     )
 
     return LaunchDescription([
@@ -211,7 +212,7 @@ def generate_launch_description():
         robot_state_publisher,
         move_group_node,
         rviz2_node,
-        serial_bridge_node,  
+        #microros_agent_node,
         
         # Load Joint State Broadcaster first, then the rest of the controllers after a delay
         TimerAction(
