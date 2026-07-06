@@ -109,12 +109,32 @@ def generate_launch_description():
     }
 
     moveit_controllers_config = {
-        'moveit_controller_manager': 'moveit_simple_controller_manager/MoveItSimpleControllerManager',
-        'moveit_simple_controller_manager.controller_names': ['helene_trajectory_controller'],
-        'moveit_simple_controller_manager.helene_trajectory_controller.type': 'FollowJointTrajectory',
-        'moveit_simple_controller_manager.helene_trajectory_controller.action_ns': 'follow_joint_trajectory',
-        'moveit_simple_controller_manager.helene_trajectory_controller.default': True,
-        'moveit_simple_controller_manager.helene_trajectory_controller.joints': ['q1', 'q2', 'q3', 'q4', 'q5', 'q6'],
+        'moveit_manage_controllers': True,
+        
+        # Diciamo a MoveIt di usare il controller manager intelligente che parla con ros2_control
+        'moveit_controller_manager': 'moveit_ros_control_interface/MoveItControllerManager',
+        
+        # Mappiamo i controller che ros2_control ha effettivamente a disposizione
+        'moveit_ros_control_interface': {
+            'ros_control_namespace': '/',
+            'ros_control_node_name': 'controller_manager',
+            'controller_names': ['helene_trajectory_controller', 'helene_velocity_controller'],
+            
+            # Configuriamo il controller di traiettoria
+            'helene_trajectory_controller': {
+                'type': 'FollowJointTrajectory',
+                'action_ns': 'follow_joint_trajectory',
+                'default': True,
+                'joints': ['q1', 'q2', 'q3', 'q4', 'q5', 'q6'],
+            },
+            
+            # Diciamo a MoveIt che esiste anche il controller di velocità
+            'helene_velocity_controller': {
+                'type': 'JointGroupVelocityController',
+                'default': False,
+                'joints': ['q1', 'q2', 'q3', 'q4', 'q5', 'q6'],
+            }
+        }
     }
 
     # 3. MoveGroup Node
@@ -166,10 +186,20 @@ def generate_launch_description():
         event_handler=OnProcessExit(
             target_action=joint_state_broadcaster,
             on_exit=[
+                # 1. Controller per lo SpaceMouse (Velocità)
                 Node(
                     package="controller_manager",
                     executable="spawner",
-                    arguments=["helene_trajectory_controller"],
+                    arguments=["helene_velocity_controller"],
+                    parameters=[sim_time_param]
+                ),
+                # 2. Controller per RViz (Traiettorie) - AGGIUNTO!
+                Node(
+                    package="controller_manager",
+                    executable="spawner",
+                    # Nota: mettiamo --inactive per evitare che litighi con il controller di velocità all'avvio. 
+                    # MoveIt lo attiverà automaticamente quando premi "Plan and Execute".
+                    arguments=["helene_trajectory_controller", "--inactive"],
                     parameters=[sim_time_param]
                 ),
                 #Node(
@@ -207,18 +237,39 @@ def generate_launch_description():
         arguments=['serial', '--dev', '/dev/helene_esp', '-b', '460800']
     )
 
-    # 9. SpaceNav Driver Node
+    # 9. SpaceNav Driver Node (Ripristinato originale che sputa Twist)
     spacenav_driver_node = Node(
         package='spacenav',
         executable='spacenav_node',
         name='spacenav_node',
         output='screen',
-        parameters=[sim_time_param]
+        parameters=[sim_time_param, {'zero_when_static': True}]
+    )
+
+    # 9.1 Convertitore Nativo Python (Sintassi lineare compatta)
+    from launch.actions import ExecuteProcess
+    import sys
+    
+    python_transformer = ExecuteProcess(
+        cmd=[
+            sys.executable, '-c',
+            'import rclpy; '
+            'from rclpy.node import Node; '
+            'from geometry_msgs.msg import Twist, TwistStamped; '
+            'from std_msgs.msg import Header; '
+            'rclpy.init(); '
+            'node = Node("inline_transformer"); '
+            'pub = node.create_publisher(TwistStamped, "/spacenav/twist_stamped", 10); '
+            'sub = node.create_subscription(Twist, "/spacenav/twist", lambda msg: pub.publish(TwistStamped(header=Header(stamp=node.get_clock().now().to_msg(), frame_id="base_link"), twist=msg)), 10); '
+            'rclpy.spin(node)'
+        ],
+        output='screen'
     )
 
     return LaunchDescription([
         #microros_agent_node,
         spacenav_driver_node,
+        python_transformer,
         # Load the main nodes after a delay to ensure the micro-ROS agent is ready
         TimerAction(
             period=2.0,
