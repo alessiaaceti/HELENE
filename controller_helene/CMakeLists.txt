@@ -131,10 +131,10 @@ install(
 # DESTINATION lib/${PROJECT_NAME}
 #)
 
-# Install Python Scripts
-install(PROGRAMS
-  scripts/helene_keyboard_bridge.py
-  DESTINATION lib/${PROJECT_NAME}
+# Install Python Scripts with Execution Permissions
+install(DIRECTORY scripts/
+  DESTINATION share/${PROJECT_NAME}/scripts
+  PATTERN ".py" PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ GROUP_EXECUTE GROUP_READ WORLD_EXECUTE WORLD_READ
 )
 
 # ==========================================

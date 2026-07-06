@@ -1,37 +1,30 @@
 servo_node:
   ros__parameters:
-    # CRITICAL: MUST BE FALSE FOR REAL ROBOT. TRUE IS ONLY FOR GAZEBO.
     use_sim_time: false 
     moveit_servo:
       status_topic: "status"
       command_out_type: "trajectory_msgs/JointTrajectory"
-      # conjunction Servo and Robot -> controller has to be configured with the same topic name
-      command_out_topic: "/helene_trajectory_controller/joint_trajectory" # output topic for joint commands
-      publish_period: 0.01
+      command_out_topic: "/helene_trajectory_controller/joint_trajectory"
+      publish_period: 0.05
       command_in_type: "speed_units"
       cartesian_command_in_topic: "/servo_node/delta_twist_cmds"
-      joint_command_in_topic: "/servo_node/delta_joint_cmds" # input topic for joint commands
+      joint_command_in_topic: "/servo_node/delta_joint_cmds"
       move_group_name: "helene_arm"
       planning_frame: "base_link"
       ee_frame_name: "axis_6"
-      robot_link_command_frame: "base_link"
+      robot_link_command_frame: "axis_6"
       incoming_twist_stale_frame_tolerance: 0.5
       joint_limit_margin: 0.1
-      global_breakpoint_threshold: 0.03 # threshold for global breakpoint
-      lower_singularity_threshold: 30.0
-      hard_stop_singularity_threshold: 50.0
+      global_breakpoint_threshold: 0.03
+      lower_singularity_threshold: 0.001
+      hard_stop_singularity_threshold: 0.002
       leaving_singularity_threshold_multiplier: 2.0
-      
-      # NOTE: For extreme safety on a real robot, this should ideally be true.
-      # Left as false based on your setup, but be aware it won't avoid self-collisions.
       check_collisions: false 
       collision_check_rate: 10.0
       collision_distance_safety_threshold: 0.05
       min_allowable_collision_distance: 0.01
-      low_pass_filter_coeff: 5.0
-      
-      # SAFETY SCALES FOR REAL ROBOT INITIAL TESTS
+      low_pass_filter_coeff: 0.15
       scale:
-        linear: 0.015
-        rotational: 0.03
-        joint: 0.01
+        linear: 0.1
+        rotational: 0.1
+        joint: 0.05

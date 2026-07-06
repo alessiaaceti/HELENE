@@ -57,6 +57,7 @@ boolean g_tx_frame_master2slave_send = false;
 int g_init_order[6] = {2, 3, 4, 5, 1, 6};
 uint8_t g_ma2sl_led_red = 0;
 boolean g_first_command_received = false; // Interlock safety latch to prevent startup spikes before initialization
+unsigned long g_last_command_time = 0;    // Global timestamp tracking for safety watchdog
 
 // Joint Name Strings matching URDF exactly (q1 - q6)
 const char* joint_names_mapping[6] = {"q1", "q2", "q3", "q4", "q5", "q6"};
@@ -160,12 +161,16 @@ void sub_joint_commands_callback(const void * msgin) {
   if (msg->velocity.size == 0) return;
   
   g_first_command_received = true;
+  g_last_command_time = millis(); // Refresh watchdog timer on every incoming command
   
   // Fast asynchronous memory copy to prevent incoming serial port buffer overflow
   int limit = (msg->velocity.size < 6) ? msg->velocity.size : 6;
   for (int i = 0; i < limit; i++) {
     g_target_velocities_rad_s[i] = msg->velocity.data[i];
   }
+
+  // Ping micro-ROS Agent to ensure connection is still alive
+  RCSOFTCHECK(rmw_uros_ping_agent(10, 1));
 }
 
 void sub_blue_callback(const void * msgin) {
@@ -309,10 +314,29 @@ void setup() {
     }
   }
 
+  // --- micro-ROS Initialization ---
   Serial.begin(460800); 
+  rcutils_logging_set_default_logger_level(RCUTILS_LOG_SEVERITY_INFO);
   set_microros_serial_transports(Serial); 
 
   allocator = rcl_get_default_allocator();
+
+  // --- Visual Feedback for micro-ROS Agent Connection ---
+  obj_pixels[0] = makeRGBVal(255, 100, 0);
+  ws2812_setColors(1, obj_pixels);
+
+  // --- Wait for micro-ROS Agent to be available ---
+  while (rmw_uros_ping_agent(100, 1) != RMW_RET_OK) {
+    obj_pixels[0] = makeRGBVal(255, 100, 0); ws2812_setColors(1, obj_pixels); delay(250);
+    obj_pixels[0] = makeRGBVal(0, 0, 0);     ws2812_setColors(1, obj_pixels); delay(250);
+  }
+
+  // --- micro-ROS Agent Connected ---
+  obj_pixels[0] = makeRGBVal(0, 255, 0); // green LED to indicate successful connection
+  ws2812_setColors(1, obj_pixels);
+  delay(500);
+
+  // -- micro-ROS Node and Executor Initialization ---
   RCCHECK(rclc_support_init(&support, 0, NULL, &allocator));
   RCCHECK(rclc_node_init_default(&node, "helene_esp_master", "", &support));
 
@@ -385,6 +409,7 @@ void setup() {
   obj_init_PID.SetOutputLimits(-15000, 15000); 
   
   g_Setpoint_obj_init_PID = (double)(obj_angleSensor.getRotation() * g_as_sign[g_this_joint - 1]);
+  g_last_command_time = millis(); // Initialize watchdog timestamp
 }
 
 void loop() {
@@ -442,39 +467,59 @@ void loop() {
     }
   }
 
-  // --- Asynchronous Hardware Processor Block ---
-  // Processes data received in the callback outside the micro-ROS interrupt context
-  if (g_first_command_received) {
-    g_master2slave.operation_ident = 1;
-    
-    // Asynchronously propagate incoming velocity updates to downstream CAN Slaves
-    CAN_frame_t tx_frame;
-    for (int joint = 1; joint < 6; joint++) {
-      tx_frame.FIR.B.FF = CAN_frame_std;
-      tx_frame.MsgID = joint + 1;
-      tx_frame.FIR.B.DLC = 8;
-      
-      long target_speed_ticks = (g_target_velocities_rad_s[joint] / (2.0 * PI)) * 16384.0;
-      g_master2slave.target_velocity = target_speed_ticks;
-      memcpy(tx_frame.data.u8, g_master2slave.data, 8);
-      ESP32Can.CANWriteFrame(&tx_frame);
-    }
-    
-    // Actuate Local Driver (Joint 1 Master) in velocity mode within execution limits
-    long master_target_speed_ticks = (g_target_velocities_rad_s[0] / (2.0 * PI)) * 16384.0;
-    long max_safe_ticks = 2000; 
-    if (master_target_speed_ticks > max_safe_ticks) master_target_speed_ticks = max_safe_ticks;
-    if (master_target_speed_ticks < -max_safe_ticks) master_target_speed_ticks = -max_safe_ticks;
-
-    if (millis() - tmc.get_last_time_of_set_velocity() <= TIME_MS_TIMEOUT_STOP) {
-      tmc.set_velocity(master_target_speed_ticks * g_motor_transmission[0]);
-    }
-  }
-
-  // --- Unified Publishing Execution Block (~50Hz) ---
+  // --- Unified Publishing & Actuation Execution Block (~50Hz) ---
   if (millis() - g_ms_time_differenze_publish >= TIME_MS_PUBLISH_FREQUENCY) {
     g_ms_time_differenze_publish = millis();
-    
+
+    // Check if the PC has disconnected or stopped sending commands (Failsafe Watchdog)
+    if (g_first_command_received && (millis() - g_last_command_time > TIME_MS_TIMEOUT_STOP)) {
+      // Emergency Stop: Shutdown the local motor immediately
+      tmc.set_velocity(0);
+      
+      // Notify all downstream CAN Slaves to shut down or zero their velocities
+      g_master2slave.operation_ident = 0; // 0 = Turn off/Safe mode
+      g_master2slave.target_velocity = 0;
+      
+      CAN_frame_t stop_frame;
+      for (int joint = 1; joint < 6; joint++) {
+        stop_frame.FIR.B.FF = CAN_frame_std;
+        stop_frame.MsgID = joint + 1;
+        stop_frame.FIR.B.DLC = 8;
+        memcpy(stop_frame.data.u8, g_master2slave.data, 8);
+        ESP32Can.CANWriteFrame(&stop_frame);
+      }
+      
+      // Update telemetry LEDs to signal a Watchdog Trip (Solid Red)
+      g_master2slave.led_green = 0;
+      g_master2slave.led_blue = 0;
+      g_ma2sl_led_red = 255;
+    }
+    // Normal operation: commands are fresh and active
+    else if (g_first_command_received) {
+      g_master2slave.operation_ident = 1; // CRITICAL FIX: Explicitly set to 1 for Normal Operation Mode!
+      g_ma2sl_led_red = 0;                // Clear error led color
+      
+      CAN_frame_t tx_frame;
+      for (int joint = 1; joint < 6; joint++) {
+        tx_frame.FIR.B.FF = CAN_frame_std;
+        tx_frame.MsgID = joint + 1;
+        tx_frame.FIR.B.DLC = 8;
+        
+        long target_speed_ticks = (g_target_velocities_rad_s[joint] / (2.0 * PI)) * 16384.0;
+        g_master2slave.target_velocity = target_speed_ticks;
+        memcpy(tx_frame.data.u8, g_master2slave.data, 8);
+        ESP32Can.CANWriteFrame(&tx_frame);
+      }    
+
+      // Actuate Local Driver (Joint 1 Master) in velocity mode
+      long master_target_speed_ticks = (g_target_velocities_rad_s[0] / (2.0 * PI)) * 16384.0;
+      long max_safe_ticks = 2000; 
+      if (master_target_speed_ticks > max_safe_ticks) master_target_speed_ticks = max_safe_ticks;
+      if (master_target_speed_ticks < -max_safe_ticks) master_target_speed_ticks = -max_safe_ticks;
+      
+      tmc.set_velocity(master_target_speed_ticks * g_motor_transmission[0]);
+    }
+  
     // 1. Dispatch force sensor readings
     rawmeas.data = g_meas2master.adc_value;
     RCSOFTCHECK(rcl_publish(&pub_meas, &rawmeas, NULL));
@@ -485,7 +530,6 @@ void loop() {
       msg_pub_joint_states.header.stamp.sec = time_ns / 1000000000LL;
       msg_pub_joint_states.header.stamp.nanosec = time_ns % 1000000000LL;
     } else {
-      // Fallback if clock sync is temporarily unavailable
       msg_pub_joint_states.header.stamp.sec = millis() / 1000;
       msg_pub_joint_states.header.stamp.nanosec = (millis() % 1000) * 1000000;
     }
@@ -507,14 +551,7 @@ void loop() {
     // 4. Stream synchronized states downstream
     RCSOFTCHECK(rcl_publish(&pub_joint_states, &msg_pub_joint_states, NULL));
     
-    // Failsafe watchdog checks
-    if (millis() - tmc.get_last_time_of_set_velocity() > TIME_MS_TIMEOUT_STOP) {
-      tmc.set_velocity(0);
-      g_master2slave.led_green = 0;
-      g_master2slave.led_blue = 0;
-      g_ma2sl_led_red = 255;
-    }
-    
+    // RGB Telemetry Status Update 
     if (g_led_rgb[0] != g_ma2sl_led_red || g_led_rgb[1] != g_master2slave.led_green || g_led_rgb[2] != g_master2slave.led_blue) {
       g_led_rgb[0] = g_ma2sl_led_red;
       g_led_rgb[1] = g_master2slave.led_green;

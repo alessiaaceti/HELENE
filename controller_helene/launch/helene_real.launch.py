@@ -172,12 +172,12 @@ def generate_launch_description():
                     arguments=["helene_trajectory_controller"],
                     parameters=[sim_time_param]
                 ),
-                Node(
-                    package="controller_manager",
-                    executable="spawner",
-                    arguments=["helene_force_broadcaster"],
-                    parameters=[sim_time_param]
-                )
+                #Node(
+                #    package="controller_manager",
+                #    executable="spawner",
+                #    arguments=["helene_force_broadcaster"],
+                #    parameters=[sim_time_param]
+                #)
             ],
         )
     )
@@ -204,26 +204,42 @@ def generate_launch_description():
         executable='micro_ros_agent',
         name='micro_ros_agent',
         output='screen',
-        arguments=['serial', '--dev', '/dev/helene_esp', '-b', '460800', '-v6']
+        arguments=['serial', '--dev', '/dev/helene_esp', '-b', '460800']
+    )
+
+    # 9. SpaceNav Driver Node
+    spacenav_driver_node = Node(
+        package='spacenav',
+        executable='spacenav_node',
+        name='spacenav_node',
+        output='screen',
+        parameters=[sim_time_param]
     )
 
     return LaunchDescription([
-        ros2_control_node,
-        robot_state_publisher,
-        move_group_node,
-        rviz2_node,
         #microros_agent_node,
+        spacenav_driver_node,
+        # Load the main nodes after a delay to ensure the micro-ROS agent is ready
+        TimerAction(
+            period=2.0,
+            actions=[
+                ros2_control_node,
+                robot_state_publisher,
+                move_group_node,
+                rviz2_node,
+            ]
+        ),
         
         # Load Joint State Broadcaster first, then the rest of the controllers after a delay
         TimerAction(
-            period=2.0,
+            period=3.0,
             actions=[joint_state_broadcaster]
         ),
         load_controllers,
         
         # Security delay 
         TimerAction(
-            period=5.0, 
+            period=8.0, 
             actions=[servo_node]
         )
     ])

@@ -38,7 +38,7 @@ def generate_launch_description():
             robot_description_semantic,
             robot_description_kinematics,
             servo_yaml_path,
-            {'use_sim_time': True} 
+            {'use_sim_time': False} 
         ]
     )
 
