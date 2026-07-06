@@ -23,8 +23,8 @@ servo_node:
       joint_limit_margin: 0.1
       global_breakpoint_threshold: 0.03
       
-      lower_singularity_threshold: 0.005
-      hard_stop_singularity_threshold: 0.01
+      lower_singularity_threshold: 10000.0
+      hard_stop_singularity_threshold: 100000.0
       singularity_check_operator: "DLS"
       leaving_singularity_threshold_multiplier: 2.0
       check_collisions: false 

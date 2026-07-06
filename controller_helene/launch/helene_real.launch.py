@@ -110,7 +110,7 @@ def generate_launch_description():
 
     moveit_controllers_config = {
         'moveit_manage_controllers': True,
-        
+
         # Diciamo a MoveIt di usare il controller manager intelligente che parla con ros2_control
         'moveit_controller_manager': 'moveit_ros_control_interface/MoveItControllerManager',
         
@@ -266,10 +266,42 @@ def generate_launch_description():
         output='screen'
     )
 
+    # 9.2 Convertitore per l'ESP32 (Da MultiArray a JointState)
+    esp32_bridge_script = """
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import Float64MultiArray
+from sensor_msgs.msg import JointState
+
+def main():
+    rclpy.init()
+    node = Node('esp32_command_bridge')
+    pub = node.create_publisher(JointState, '/helene_trajectory_controller/joint_commands', 10)
+    
+    def cb(msg):
+        js = JointState()
+        js.header.stamp = node.get_clock().now().to_msg()
+        js.name = ['q1', 'q2', 'q3', 'q4', 'q5', 'q6']
+        js.velocity = list(msg.data)
+        pub.publish(js)
+        
+    sub = node.create_subscription(Float64MultiArray, '/helene_velocity_controller/commands', cb, 10)
+    rclpy.spin(node)
+
+if __name__ == '__main__':
+    main()
+"""
+
+    esp32_bridge = ExecuteProcess(
+        cmd=[sys.executable, '-c', esp32_bridge_script],
+        output='screen'
+    )
+    
     return LaunchDescription([
         #microros_agent_node,
         spacenav_driver_node,
         python_transformer,
+        esp32_bridge,
         # Load the main nodes after a delay to ensure the micro-ROS agent is ready
         TimerAction(
             period=2.0,
