@@ -1,4 +1,6 @@
 trajectory_execution:
+  #--- Trajectory execution parameters
+  # highly permissive execution parameters for testing, but not recommended for production
   allowed_execution_duration_scaling: 6.0
   allowed_goal_duration_margin: 10.0
   trajectory_execution_duration_monitoring: true

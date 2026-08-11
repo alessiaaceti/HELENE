@@ -10,24 +10,25 @@ servo_node:
       publish_joint_accelerations: false
       publish_period: 0.01
       
-      # --- CONFIGURAZIONE CARTESIANA REALE ---
-      command_in_type: "speed_units" # Cambiato in speed_units (vuole TwistStamped)
-      cartesian_command_in_topic: "/spacenav/twist_stamped" # Ascolta il nostro convertitore inline!
+      # --- cartesian configuration ---
+      command_in_type: "speed_units" # changed in speed_units (requires TwistStamped)
+      cartesian_command_in_topic: "/servo_node/delta_twist_cmds"
       joint_command_in_topic: "/servo_node/delta_joint_cmds"
       
       move_group_name: "helene_arm"
       planning_frame: "base_link"
       ee_frame_name: "axis_6"
-      robot_link_command_frame: "base_link" # Impostato su base_link per muoversi coerentemente col mondo
+      robot_link_command_frame: "base_link" 
       incoming_twist_stale_frame_tolerance: 0.5
       joint_limit_margin: 0.1
       global_breakpoint_threshold: 0.03
-      
+      # --- singularity configuration --- 
+      # disable singularity avoidance for now
       lower_singularity_threshold: 10000.0
       hard_stop_singularity_threshold: 100000.0
       singularity_check_operator: "DLS"
       leaving_singularity_threshold_multiplier: 2.0
-      check_collisions: false 
+      check_collisions: false # disabled for now
       collision_check_rate: 10.0
       collision_distance_safety_threshold: 0.05
       min_allowable_collision_distance: 0.01

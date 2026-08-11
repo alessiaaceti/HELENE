@@ -15,7 +15,7 @@
 
 // Standard ROS 2 Message Types
 #include <sensor_msgs/msg/joint_state.h> 
-#include <std_msgs/msg/float32.h>
+#include <geometry_msgs/msg/vector3.h> // for publishing Fx, Fy, Fz from the force sensor with 3 axes
 #include <std_msgs/msg/u_int8.h>
 
 // Error handling macros for micro-ROS functions with motor stop on error
@@ -98,9 +98,11 @@ convert_config g_platine2config;
 
 typedef union { 
   struct {
-    float adc_value;
+    int16_t Fx;
+    int16_t Fy;
+    int16_t Fz;
   };
-  uint8_t data[4];
+  uint8_t data[8];
 } convert_f2c;
 convert_f2c g_meas2master;
 
@@ -121,7 +123,7 @@ rclc_executor_t executor;
 
 // Publishers
 rcl_publisher_t pub_joint_states; // Single Unified Publisher required by Robot State Broadcaster
-rcl_publisher_t pub_meas;
+rcl_publisher_t pub_meas;         // Publishes Fx, Fy, Fz from the force sensor with 3 axes
 
 // Subscribers
 rcl_subscription_t sub_joint_commands; // Intercepts velocity/position profiles pushed by MoveIt
@@ -132,7 +134,7 @@ rcl_subscription_t sub_ledgreen;
 // Message Instances
 sensor_msgs__msg__JointState msg_pub_joint_states;   // Outgoing telemetry to RViz
 sensor_msgs__msg__JointState msg_sub_joint_commands; // Incoming references from MoveIt
-std_msgs__msg__Float32 rawmeas;
+geometry_msgs__msg__Vector3 msg_force;               // Fx, Fy, Fz from the force sensor with 3 axes
 std_msgs__msg__UInt8 msg_sub_ledblue;
 std_msgs__msg__UInt8 msg_sub_reserved;
 std_msgs__msg__UInt8 msg_sub_ledgreen;
@@ -388,7 +390,7 @@ void setup() {
   }
 
   RCCHECK(rclc_publisher_init_default(&pub_joint_states, &node, ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, JointState), "esp_joint_states"));
-  RCCHECK(rclc_publisher_init_default(&pub_meas, &node, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32), "raw_meas"));
+  RCCHECK(rclc_publisher_init_default(&pub_meas, &node, ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, Vector3), "raw_meas_vector"));
 
   RCCHECK(rclc_subscription_init_default(&sub_joint_commands, &node, ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, JointState), "helene_trajectory_controller/joint_commands"));
   RCCHECK(rclc_subscription_init_default(&sub_ledblue, &node, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, UInt8), "helene_led_blue"));
@@ -413,8 +415,13 @@ void setup() {
 }
 
 void loop() {
+
   CAN_frame_t rx_frame;
-  
+
+  // empty the CAN queue in a NON blocking way (timeout 0): all the frames in
+  // arrival (angles/velocities of the slaves, configuration responses and
+  // force sensor responses with 3 axes) are handled here, in a single cycle,
+  // so as not to block the main loop.
   while (xQueueReceive(CAN_cfg.rx_queue, &rx_frame, 0) == pdTRUE) {
     if (rx_frame.FIR.B.RTR != CAN_RTR && rx_frame.MsgID >= 10 && rx_frame.MsgID <= 19) {
       memcpy(g_slave2master.data, rx_frame.data.u8, 8);
@@ -462,14 +469,25 @@ void loop() {
         ESP32Can.CANWriteFrame(&l_tx_frame);
       }
     }
-    if (rx_frame.FIR.B.RTR != CAN_RTR && rx_frame.MsgID == 42) {
-      memcpy(g_meas2master.data, rx_frame.data.u8, 4);
+    // Response from the force sensor with 3 axes to the request sent below
+    if (rx_frame.FIR.B.RTR != CAN_RTR && rx_frame.MsgID == 0x20) {
+      memcpy(g_meas2master.data, rx_frame.data.u8, 6);
     }
   }
 
   // --- Unified Publishing & Actuation Execution Block (~50Hz) ---
   if (millis() - g_ms_time_differenze_publish >= TIME_MS_PUBLISH_FREQUENCY) {
     g_ms_time_differenze_publish = millis();
+
+    // 0. Request a new sample from the force sensor with 3 axes (non-blocking).
+    //    the answer (MsgID 0x20) is collected in the next iteration by the cycle
+    //    xQueueReceive above, together with all other CAN frames.
+    CAN_frame_t tx_frame_force;
+    tx_frame_force.FIR.B.FF = CAN_frame_std;
+    tx_frame_force.MsgID = 0x20;
+    tx_frame_force.FIR.B.DLC = 1;
+    tx_frame_force.data.u8[0] = 0;
+    ESP32Can.CANWriteFrame(&tx_frame_force);
 
     // Check if the PC has disconnected or stopped sending commands (Failsafe Watchdog)
     if (g_first_command_received && (millis() - g_last_command_time > TIME_MS_TIMEOUT_STOP)) {
@@ -520,9 +538,11 @@ void loop() {
       tmc.set_velocity(master_target_speed_ticks * g_motor_transmission[0]);
     }
   
-    // 1. Dispatch force sensor readings
-    rawmeas.data = g_meas2master.adc_value;
-    RCSOFTCHECK(rcl_publish(&pub_meas, &rawmeas, NULL));
+    // 1. Dispatch the 3 components of the force sensor (Fx, Fy, Fz)
+    msg_force.x = (double)g_meas2master.Fx;
+    msg_force.y = (double)g_meas2master.Fy;
+    msg_force.z = (double)g_meas2master.Fz;
+    RCSOFTCHECK(rcl_publish(&pub_meas, &msg_force, NULL));
     
     // 2. Sync Epoch System Timestamp from Agent to prevent RViz model flickering/jitters
     int64_t time_ns = rmw_uros_epoch_nanos();

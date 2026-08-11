@@ -5,8 +5,9 @@ from launch_ros.actions import Node
 import yaml
 import subprocess
 
+
 def generate_launch_description():
-    # Trova le directory dei pacchetti dinamicamente
+    # Find the directory of the packages dynamically
     hw_desc_pkg = get_package_share_directory('hw_description')
     moveit_cfg_pkg = get_package_share_directory('helene_moveit_config')
     controller_pkg = get_package_share_directory('controller_helene')
@@ -15,7 +16,7 @@ def generate_launch_description():
     srdf_path = os.path.join(moveit_cfg_pkg, 'config', 'helene.srdf')
     kinematics_path = os.path.join(moveit_cfg_pkg, 'config', 'kinematics.yaml')
     servo_yaml_path = os.path.join(controller_pkg, 'config', 'servo_params.yaml')
-    
+
     # Xacro
     robot_description_config = subprocess.check_output(['xacro', xacro_path]).decode('utf-8')
     robot_description = {"robot_description": robot_description_config}
@@ -38,8 +39,33 @@ def generate_launch_description():
             robot_description_semantic,
             robot_description_kinematics,
             servo_yaml_path,
-            {'use_sim_time': False} 
+            {'use_sim_time': False}
         ]
     )
 
-    return LaunchDescription([servo_node])
+    # Convert raw_meas (Vector3 from firmware ESP32) in /force_torque_sensor (WrenchStamped)
+    raw_meas_to_wrench_node = Node(
+        package='controller_helene',
+        executable='raw_meas_to_wrench',
+        output='screen',
+        parameters=[
+            {'sensor_frame_id': 'axis_6'}
+        ]
+    )
+
+    # Read /force_torque_sensor and command MoveIt Servo with a twist proportional to the force
+    force_servo_teleop_node = Node(
+        package='controller_helene',
+        executable='helene_force_servo_teleop',
+        output='screen',
+        parameters=[
+            {'sensor_frame': 'axis_6'},
+            {'command_frame': 'base_link'},
+        ]
+    )
+
+    return LaunchDescription([
+        servo_node,
+        raw_meas_to_wrench_node,
+        force_servo_teleop_node,
+    ])

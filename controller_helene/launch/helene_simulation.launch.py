@@ -259,6 +259,6 @@ def generate_launch_description():
         # before starting MoveIt Servo and the Teleop Translator node
         TimerAction(
             period=8.0, 
-            actions=[servo_node]  #, helene_force_servo_teleop
+            actions=[servo_node, helene_force_servo_teleop]
         )
     ])

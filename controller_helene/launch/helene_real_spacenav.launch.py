@@ -24,12 +24,12 @@ def generate_launch_description():
     pkg_hw_description = get_package_share_directory('hw_description')
     pkg_controller_helene = get_package_share_directory('controller_helene')
     pkg_helene_moveit_config = get_package_share_directory('helene_moveit_config')
-    
+
     xacro_file = os.path.join(pkg_hw_description, 'urdf', 'helene_hw.urdf.xacro')
     srdf_file = os.path.join(pkg_helene_moveit_config, 'config', 'helene.srdf')
     with open(srdf_file, 'r') as f:
         robot_description_semantic_config = f.read()
-    
+
     # Real robot parameters
     sim_time_param = {'use_sim_time': False}
     use_mock_hardware = 'false'
@@ -106,7 +106,7 @@ def generate_launch_description():
                                 'default_planner_request_adapters/FixStartStatePathConstraints',
             'start_state_max_bounds_error': 0.1,
             'planner_configs': ['RRTConnectkConfigDefault'],
-            'RRTConnectkConfigDefault': { 'type': 'geometric::RRTConnect', 'range': 0.0 }
+            'RRTConnectkConfigDefault': {'type': 'geometric::RRTConnect', 'range': 0.0}
         }
     }
 
@@ -153,6 +153,7 @@ def generate_launch_description():
             moveit_controllers_config,
             planning_scene_monitor_config,
             sim_time_param,
+            # Disable strict execution time monitoring to prevent TIMED_OUT errors
             {'trajectory_execution.execution_duration_monitoring': False}
         ],
     )
@@ -184,7 +185,7 @@ def generate_launch_description():
         parameters=[sim_time_param]
     )
 
-    # 6. Event Handler: Activate velocity controller for MoveIt Servo upon broadcaster exit
+    # 6. Event Handler: Load controllers after Joint State Broadcaster completes
     load_controllers = RegisterEventHandler(
         event_handler=OnProcessExit(
             target_action=joint_state_broadcaster,
@@ -221,33 +222,7 @@ def generate_launch_description():
         ],
     )
 
-    # 8. Force Sensor Bridge: Vector3 -> WrenchStamped (axis_6)
-    raw_meas_to_wrench_node = Node(
-        package='controller_helene',
-        executable='raw_meas_to_wrench',
-        name='raw_meas_to_wrench',
-        output='screen',
-        parameters=[
-            {'sensor_frame_id': 'axis_6'},
-            {'scale_factor': 1000.0},
-            sim_time_param
-        ]
-    )
-
-    # 9. Admittance Teleop Node: WrenchStamped -> Rotation TF -> TwistStamped
-    force_servo_teleop_node = Node(
-        package='controller_helene',
-        executable='helene_force_servo_teleop',
-        name='helene_force_servo_teleop',
-        output='screen',
-        parameters=[
-            {'sensor_frame': 'axis_6'},
-            {'command_frame': 'base_link'},
-            sim_time_param
-        ]
-    )
-
-    # 10. Micro-ROS Agent Node (serial communication with ESP32)
+    # 8. Micro-ROS Agent Node (ESP32 serial communication)
     microros_agent_node = Node(
         package='micro_ros_agent',
         executable='micro_ros_agent',
@@ -256,22 +231,42 @@ def generate_launch_description():
         arguments=['serial', '--dev', '/dev/helene_esp', '-b', '460800']
     )
 
-    # 11. Automatic Controller Switcher Node for Force Teleoperation
-    force_controller_switcher_script = """
+    # 9. SpaceNav Driver Node
+    spacenav_driver_node = Node(
+        package='spacenav',
+        executable='spacenav_node',
+        name='spacenav_node',
+        output='screen',
+        parameters=[sim_time_param, {'zero_when_static': True}]
+    )
+
+    # 10. Transformer with Smart Automatic Controller Switching
+    transformer_script = """
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import TwistStamped
+from geometry_msgs.msg import Twist, TwistStamped
 from controller_manager_msgs.srv import SwitchController, ListControllers
 
-class ForceControllerSwitcher(Node):
+class SpaceNavTransformer(Node):
     def __init__(self):
-        super().__init__('force_controller_switcher')
-        self.sub = self.create_subscription(TwistStamped, '/servo_node/delta_twist_cmds', self.cb, 10)
+        super().__init__('spacenav_transformer')
+        self.pub = self.create_publisher(TwistStamped, '/servo_node/delta_twist_cmds', 10)
+        self.sub = self.create_subscription(Twist, '/spacenav/twist', self.cb, 10)
 
+        # Clients for automatic ros2_control manager switching
         self.cli_list = self.create_client(ListControllers, '/controller_manager/list_controllers')
         self.cli_switch = self.create_client(SwitchController, '/controller_manager/switch_controller')
 
         self.is_switching = False
+
+        # --- AXIS MAPPING & INVERSION ---
+        self.scale_x = -1.0  # Inverted: Push forward -> Move forward (+X)
+        self.scale_y = -1.0  # Inverted: Push right -> Move right (-Y)
+        self.scale_z = 1.0   # Pull up -> Move up (+Z)
+
+        self.scale_rx = 1.0
+        self.scale_ry = -1.0
+        self.scale_rz = 1.0
 
     def check_and_switch_controller(self):
         if self.is_switching or not self.cli_list.service_is_ready():
@@ -293,9 +288,10 @@ class ForceControllerSwitcher(Node):
                 if ctrl.name == 'helene_trajectory_controller' and ctrl.state == 'active':
                     traj_active = True
 
+            # If velocity controller is not active, activate it on the fly
             if not vel_active and self.cli_switch.service_is_ready():
                 self.is_switching = True
-                self.get_logger().info('Force teleop activity detected: Switching to helene_velocity_controller...')
+                self.get_logger().info('SpaceMouse movement detected: Switching to helene_velocity_controller...')
                 
                 switch_req = SwitchController.Request()
                 switch_req.activate_controllers = ['helene_velocity_controller']
@@ -310,33 +306,44 @@ class ForceControllerSwitcher(Node):
             self.is_switching = False
 
     def cb(self, msg):
+        # Check if user is physically touching/moving SpaceMouse knob
         moving = any([
-            abs(msg.twist.linear.x) > 0.001,
-            abs(msg.twist.linear.y) > 0.001,
-            abs(msg.twist.linear.z) > 0.001,
-            abs(msg.twist.angular.x) > 0.001,
-            abs(msg.twist.angular.y) > 0.001,
-            abs(msg.twist.angular.z) > 0.001
+            abs(msg.linear.x) > 0.02, abs(msg.linear.y) > 0.02, abs(msg.linear.z) > 0.02,
+            abs(msg.angular.x) > 0.02, abs(msg.angular.y) > 0.02, abs(msg.angular.z) > 0.02
         ])
 
         if moving:
             self.check_and_switch_controller()
 
+        ts = TwistStamped()
+        ts.header.stamp = self.get_clock().now().to_msg()
+        ts.header.frame_id = 'base_link'
+
+        ts.twist.linear.x = msg.linear.x * self.scale_x
+        ts.twist.linear.y = msg.linear.y * self.scale_y
+        ts.twist.linear.z = msg.linear.z * self.scale_z
+
+        ts.twist.angular.x = msg.angular.x * self.scale_rx
+        ts.twist.angular.y = msg.angular.y * self.scale_ry
+        ts.twist.angular.z = msg.angular.z * self.scale_rz
+
+        self.pub.publish(ts)
+
 def main():
     rclpy.init()
-    node = ForceControllerSwitcher()
+    node = SpaceNavTransformer()
     rclpy.spin(node)
 
 if __name__ == '__main__':
     main()
 """
 
-    force_controller_switcher_node = ExecuteProcess(
-        cmd=[sys.executable, '-c', force_controller_switcher_script],
+    python_transformer = ExecuteProcess(
+        cmd=[sys.executable, '-c', transformer_script],
         output='screen'
     )
 
-    # 12. Command Bridge Node for ESP32 Hardware Interface
+    # 11. ESP32 Command Bridge: Converts Float64MultiArray -> JointState for ESP32
     esp32_bridge_script = """
 import rclpy
 from rclpy.node import Node
@@ -361,22 +368,25 @@ def main():
 if __name__ == '__main__':
     main()
 """
-    esp32_bridge_node = ExecuteProcess(
+    esp32_bridge = ExecuteProcess(
         cmd=[sys.executable, '-c', esp32_bridge_script],
         output='screen'
     )
 
-    # 13. Service Trigger to Start MoveIt Servo
+    # 12. Activate MoveIt Servo service
     start_servo_service = ExecuteProcess(
         cmd=['ros2', 'service', 'call', '/servo_node/start_servo', 'std_srvs/srv/Trigger', '{}'],
         output='screen'
     )
 
     return LaunchDescription([
+        # Immediate launch of hardware drivers and bridges
         microros_agent_node,
-        force_controller_switcher_node,
-        esp32_bridge_node,
-        
+        spacenav_driver_node,
+        python_transformer,
+        esp32_bridge,
+
+        # Launch core ROS 2 and MoveIt nodes after brief delay
         TimerAction(
             period=2.0,
             actions=[
@@ -386,22 +396,21 @@ if __name__ == '__main__':
                 rviz2_node,
             ]
         ),
-        
+
+        # Launch Joint State Broadcaster first, triggering controller loading on exit
         TimerAction(
             period=3.0,
             actions=[joint_state_broadcaster]
         ),
         load_controllers,
-        
+
+        # Launch MoveIt Servo node once controllers are ready
         TimerAction(
-            period=8.0, 
-            actions=[
-                servo_node,
-                raw_meas_to_wrench_node,
-                force_servo_teleop_node
-            ]
+            period=8.0,
+            actions=[servo_node]
         ),
 
+        # Final trigger to activate Servo mode
         TimerAction(
             period=10.0,
             actions=[start_servo_service]

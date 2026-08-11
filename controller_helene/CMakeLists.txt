@@ -21,6 +21,7 @@ find_package(kdl_parser REQUIRED)
 find_package(orocos_kdl REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
 
 # ==========================================
 # 2. Hardware Interface Library
@@ -66,7 +67,7 @@ ament_target_dependencies(force_feedback_node
   tf2_ros
 )
 
-# --- MODIFICATO QUI: Dipendenza corretta per il nodo ---
+# --- Node dependencies for message generation ---
 if(TARGET helene_msgs__rosidl_typesupport_cpp)
   add_dependencies(force_feedback_node helene_msgs__rosidl_typesupport_cpp)
 endif()
@@ -82,6 +83,13 @@ ament_target_dependencies(helene_joystick_teleop rclcpp sensor_msgs geometry_msg
 # --- Helene Force Servo Teleop ---
 add_executable(helene_force_servo_teleop src/helene_force_servo_teleop.cpp)
 ament_target_dependencies(helene_force_servo_teleop rclcpp geometry_msgs std_msgs)
+
+# --- Raw Measurements to Wrench Converter ---
+add_executable(raw_meas_to_wrench src/raw_meas_to_wrench.cpp)
+ament_target_dependencies(raw_meas_to_wrench rclcpp geometry_msgs)
+
+ament_target_dependencies(helene_force_servo_teleop rclcpp geometry_msgs std_msgs tf2_ros tf2_geometry_msgs)
+
 
 # ==========================================
 # 4. Plugins Export
@@ -106,6 +114,7 @@ install(
     mock_force_sensor
     helene_joystick_teleop
     helene_force_servo_teleop
+    raw_meas_to_wrench
   DESTINATION lib/${PROJECT_NAME}
 )
 
