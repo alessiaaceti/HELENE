@@ -48,9 +48,10 @@ def main():
     fz_pub = rospy.Publisher("~fz", Float32, queue_size=1)
     rospy.on_shutdown(io.stop)
 
-    rospy.loginfo("waiting for force data...")
-    while not rospy.is_shutdown() and not io.fresh():
-        rospy.sleep(0.05)
+    rospy.loginfo("waiting for force data and TF...")
+    while not rospy.is_shutdown() and not io.wait_ready(need_tool=True):
+        rospy.logwarn("no force data on the topic, or TF to '%s' missing; still waiting",
+                      io.world_frame)
 
     rate = rospy.Rate(rate_hz)
     dt = 1.0 / rate_hz

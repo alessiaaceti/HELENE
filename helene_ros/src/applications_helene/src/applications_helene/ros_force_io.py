@@ -70,6 +70,20 @@ class ForceIO:
     def fresh(self):
         return self._f is not None and (rospy.Time.now() - self._stamp).to_sec() < self.timeout
 
+    def wait_ready(self, need_tool=True, timeout=10.0):
+        """Block until sensor data and the needed TF frames are available.
+        Right after start-up the TF buffer is still empty, and the first
+        lookups would fail."""
+        end = rospy.Time.now() + rospy.Duration(timeout)
+        while not rospy.is_shutdown() and rospy.Time.now() < end:
+            if self.fresh():
+                frames = [f for f in (self._frame, self.tool_frame if need_tool else "") if f]
+                if all(self.tf_buffer.can_transform(self.world_frame, f, rospy.Time(0))
+                       for f in frames):
+                    return True
+            rospy.sleep(0.05)
+        return False
+
     def force_world(self):
         """Latest force rotated into the world frame (bias NOT removed)."""
         if not self._frame:

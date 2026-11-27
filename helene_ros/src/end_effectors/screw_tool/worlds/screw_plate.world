@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<!-- Plate (single mesh, meshes/plate_with_hole.stl) with a round hole of
+     radius 2 mm, 0.5 mm chamfer and 3 mm depth, on a base block.
+     Hole centre: x=0.2012 y=-0.0008; plate top z=0.05. Contact kp 20 N/mm.
+     The insertion test starts the search at x=0.200 y=0.000, i.e. 1.4 mm off. -->
+<sdf version="1.6">
+  <world name="screw_plate">
+    <include><uri>model://ground_plane</uri></include>
+    <include><uri>model://sun</uri></include>
+    <physics type="ode">
+      <max_step_size>0.001</max_step_size>
+      <real_time_update_rate>1000</real_time_update_rate>
+    </physics>
+    <model name="plate">
+      <static>true</static>
+      <pose>0.2012 -0.0008 0.05 0 0 0</pose>
+      <link name="link">
+        <collision name="plate_c">
+          <geometry><mesh><uri>model://screw_tool/meshes/plate_with_hole.stl</uri></mesh></geometry>
+          <surface><friction><ode><mu>0.2</mu><mu2>0.2</mu2></ode></friction>
+            <contact><ode><kp>20000</kp><kd>200</kd><max_vel>0.05</max_vel><min_depth>0.00005</min_depth></ode></contact></surface>
+        </collision>
+        <visual name="plate_v">
+          <geometry><mesh><uri>model://screw_tool/meshes/plate_with_hole.stl</uri></mesh></geometry>
+        </visual>
+        <collision name="base_c">
+          <pose>0 0 -0.0165 0 0 0</pose>
+          <geometry><box><size>0.06 0.06 0.027</size></box></geometry>
+          <surface><friction><ode><mu>0.2</mu><mu2>0.2</mu2></ode></friction>
+            <contact><ode><kp>20000</kp><kd>200</kd><max_vel>0.05</max_vel><min_depth>0.00005</min_depth></ode></contact></surface>
+        </collision>
+        <visual name="base_v">
+          <pose>0 0 -0.0165 0 0 0</pose>
+          <geometry><box><size>0.06 0.06 0.027</size></box></geometry>
+        </visual>
+      </link>
+    </model>
+  </world>
+</sdf>

@@ -106,7 +106,7 @@ def _report(name, ctrl, trace):
 
 if __name__ == "__main__":
     good = InsertionParams()
-    _report("tuned (Kf=0.15 mm/s/N)", *simulate(good))
+    _report("default (Kf=0.05 mm/s/N)", *simulate(good))
     naive = InsertionParams(force_gain=0.002, max_z_speed=0.02)
     _report("naive (Kf=2 mm/s/N)", *simulate(naive))
     no_delay = InsertionParams(force_gain=0.002, max_z_speed=0.02)

@@ -1,0 +1,64 @@
+<?xml version="1.0"?>
+<launch>
+  <!--
+    Gazebo test bench for the force control nodes: HELENE with the screw_tool
+    end effector (simulated force sensor on /force_sensor/wrench) and a plate
+    with a hole. The joints use the VelocityJointInterface and the same
+    controllers as the real robot (ros_controllers.yaml + effort_group from
+    ros_controllers_jog.yaml), so MoveIt Servo runs with the real-robot
+    settings (joint velocity output). No RViz.
+
+      roslaunch applications_helene force_simulation.launch gazebo_gui:=true
+      rosrun applications_helene gazebo_force_test.py insertion
+      rosrun applications_helene gazebo_force_test.py admittance
+      rosrun applications_helene gazebo_force_test.py press
+    sensor_delay:=0.1 adds the latency of the real sensor path.
+  -->
+  <arg name="gazebo_gui" default="false"/>
+  <arg name="paused" default="false"/>
+  <!-- dead time added to the force signal [s]; the real sensor path (CAN,
+       ESP, micro-ROS, bridge, 30 Hz loop) has roughly 0.05-0.15 s -->
+  <arg name="sensor_delay" default="0.0"/>
+
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name" value="$(find screw_tool)/worlds/screw_plate.world"/>
+    <arg name="paused" value="$(arg paused)"/>
+    <arg name="gui" value="$(arg gazebo_gui)"/>
+  </include>
+
+  <node name="spawn_gazebo_model" pkg="gazebo_ros" type="spawn_model" output="screen"
+        args="-urdf -param robot_description -model helene_arm -x 0 -y 0 -z 0"/>
+
+  <node name="force_sensor_delay" pkg="applications_helene" type="topic_delay.py">
+    <param name="delay" value="$(arg sensor_delay)"/>
+  </node>
+
+  <!-- same controllers as the real robot -->
+  <rosparam file="$(find moveit_helene)/config/ros_controllers_jog.yaml" command="load"/>
+  <rosparam file="$(find moveit_helene)/config/ros_controllers.yaml" command="load"/>
+  <node name="controller_spawner" pkg="controller_manager" type="spawner" respawn="false" ns="/helene" output="screen"
+        args="--namespace=/helene joint_state_controller VelocityJointInterface_trajectory_controller --timeout 60"/>
+  <node name="controller_loader" pkg="controller_manager" type="controller_manager" respawn="false" ns="/helene" output="screen"
+        args="load effort_group"/>
+
+  <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher">
+    <rosparam param="source_list">[helene/joint_states]</rosparam>
+  </node>
+  <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" respawn="true"/>
+
+  <!-- MoveIt with the real-robot controller list (ros_controllers.yaml) -->
+  <include file="$(find moveit_helene)/launch/move_group.launch">
+    <arg name="simulated" value="false"/>
+    <arg name="allow_trajectory_execution" value="true"/>
+    <arg name="fake_execution" value="false"/>
+    <arg name="info" value="true"/>
+    <arg name="end_effector" value="screw_tool"/>
+    <arg name="end_effector_package" value="screw_tool"/>
+  </include>
+
+  <!-- Must come after move_group.launch (which also sets robot_description):
+       the last definition wins. Same robot, but stepper-like velocity joints
+       in Gazebo, read by gazebo_ros_control from this parameter. -->
+  <param name="robot_description"
+         command="$(find applications_helene)/scripts/sim_velocity_urdf.py end_effector:=screw_tool end_effector_package:=screw_tool"/>
+</launch>

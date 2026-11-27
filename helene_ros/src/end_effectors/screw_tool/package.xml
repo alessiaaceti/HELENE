@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>screw_tool</name>
+  <version>0.0.0</version>
+  <description>Screw held below a 3-axis force sensor, plus a Gazebo world with a plate with a threaded hole, for testing force-guided screw insertion in simulation.</description>
+  <maintainer email="267008215+alessiaaceti@users.noreply.github.com">alessiaaceti</maintainer>
+  <license>TODO</license>
+  <buildtool_depend>catkin</buildtool_depend>
+  <exec_depend>gazebo_plugins</exec_depend>
+  <exec_depend>gazebo_ros</exec_depend>
+  <export>
+    <!-- makes model://screw_tool/meshes/... resolvable in Gazebo -->
+    <gazebo_ros gazebo_model_path="${prefix}/.."/>
+  </export>
+</package>

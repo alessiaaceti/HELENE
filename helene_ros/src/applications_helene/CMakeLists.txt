@@ -229,5 +229,8 @@ target_link_libraries(complete_data_logger ${catkin_LIBRARIES})
 catkin_install_python(PROGRAMS
   scripts/admittance_node.py
   scripts/screw_insertion_node.py
+  scripts/gazebo_force_test.py
+  scripts/topic_delay.py
+  scripts/sim_velocity_urdf.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )

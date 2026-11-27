@@ -1,0 +1,90 @@
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+    <!--
+      Force sensor + screw on the flange (axis_6), pointing along axis_6 +z.
+        ft_sensor_link : the force sensor; the simulated F/T sensor measures
+                         the force in ft_joint (between flange and screw)
+        screw_link     : M3 screw, 25 mm, radius 1.5 mm, rounded tip
+        screw_tip      : TCP for the force nodes (tool_frame)
+      The simulated sensor publishes geometry_msgs/WrenchStamped on
+      /force_sensor/wrench_gazebo; force_simulation.launch relays it (with an
+      optional delay) to /force_sensor/wrench, like the real board after
+      ros1_bridge.
+    -->
+    <xacro:property name="screw_len" value="0.025"/>
+    <xacro:property name="screw_r" value="0.0015"/>
+    <xacro:property name="sensor_h" value="0.01"/>
+
+    <joint name="ft_mount_joint" type="fixed">
+        <parent link="axis_6"/>
+        <child link="ft_sensor_link"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+
+    <link name="ft_sensor_link">
+        <visual>
+            <origin xyz="0 0 ${sensor_h / 2}" rpy="0 0 0"/>
+            <geometry><cylinder length="${sensor_h}" radius="0.015"/></geometry>
+        </visual>
+        <inertial>
+            <origin xyz="0 0 ${sensor_h / 2}"/>
+            <mass value="0.05"/>
+            <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/>
+        </inertial>
+    </link>
+
+    <joint name="ft_joint" type="fixed">
+        <parent link="ft_sensor_link"/>
+        <child link="screw_link"/>
+        <origin xyz="0 0 ${sensor_h}" rpy="0 0 0"/>
+    </joint>
+
+    <link name="screw_link">
+        <visual>
+            <origin xyz="0 0 ${screw_len / 2}" rpy="0 0 0"/>
+            <geometry><cylinder length="${screw_len}" radius="${screw_r}"/></geometry>
+        </visual>
+        <!-- shaft + rounded tip. A flat cylinder end catches on the seams
+             between the boxes the plate is built from (ODE edge contacts). -->
+        <collision>
+            <origin xyz="0 0 ${(screw_len - screw_r) / 2}" rpy="0 0 0"/>
+            <geometry><cylinder length="${screw_len - screw_r}" radius="${screw_r}"/></geometry>
+        </collision>
+        <collision>
+            <origin xyz="0 0 ${screw_len - screw_r}" rpy="0 0 0"/>
+            <geometry><sphere radius="${screw_r}"/></geometry>
+        </collision>
+        <inertial>
+            <origin xyz="0 0 ${screw_len / 2}"/>
+            <mass value="0.02"/>
+            <inertia ixx="1e-6" ixy="0" ixz="0" iyy="1e-6" iyz="0" izz="1e-7"/>
+        </inertial>
+    </link>
+
+    <joint name="screw_tip_joint" type="fixed">
+        <parent link="screw_link"/>
+        <child link="screw_tip"/>
+        <origin xyz="0 0 ${screw_len}" rpy="0 0 0"/>
+    </joint>
+    <link name="screw_tip"/>
+
+    <!-- keep ft_joint as a real joint in Gazebo so its force can be read -->
+    <gazebo reference="ft_joint">
+        <provideFeedback>true</provideFeedback>
+        <disableFixedJointLumping>true</disableFixedJointLumping>
+    </gazebo>
+    <gazebo reference="ft_mount_joint">
+        <disableFixedJointLumping>true</disableFixedJointLumping>
+    </gazebo>
+    <gazebo reference="screw_link">
+        <mu1>0.2</mu1>
+        <mu2>0.2</mu2>
+    </gazebo>
+    <gazebo>
+        <plugin name="ft_sensor" filename="libgazebo_ros_ft_sensor.so">
+            <updateRate>100.0</updateRate>
+            <topicName>/force_sensor/wrench_gazebo</topicName>
+            <jointName>ft_joint</jointName>
+            <gaussianNoise>0.05</gaussianNoise>
+        </plugin>
+    </gazebo>
+</robot>

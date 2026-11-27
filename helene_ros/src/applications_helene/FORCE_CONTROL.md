@@ -13,6 +13,10 @@ Force sensor on the end effector → CAN → ESP → micro-ROS (ROS 2) → `ros1
 | `scripts/screw_insertion_node.py` | Demo 2: approach, spiral search, hole detection, insertion |
 | `launch/force_control.launch` | Starts Servo (with the right output for the real robot) and one of the nodes |
 | `test/test_force_control.py` | `python3 -m pytest test/` (no ROS needed) |
+| `launch/force_simulation.launch` | Gazebo test bench: HELENE + `screw_tool` (simulated force sensor) + plate with a hole, real-robot controllers |
+| `scripts/gazebo_force_test.py` | Automatic end-to-end test in Gazebo (`insertion` / `press` / `admittance`) |
+| `scripts/topic_delay.py`, `scripts/sim_velocity_urdf.py` | Test bench helpers: sensor latency, stepper-like velocity joints in Gazebo |
+| `end_effectors/screw_tool` | Sensor + screw end effector, `screw_plate.world` and the plate mesh |
 
 ## Why the force "explodes"
 
@@ -25,7 +29,9 @@ Force sensor on the end effector → CAN → ESP → micro-ROS (ROS 2) → `ros1
    then overshoots the previous one, the force oscillates with growing amplitude
    and the screw bounces on and off the surface. Example: 20 N/mm and 0.1 s
    give a limit of 0.8 mm/s per N. A "reasonable looking" 2 mm/s per N
-   is 2.5× over it. Commanding a *position* into the surface is the extreme
+   is 2.5× over it. In Gazebo, 2 mm/s per N with 100 ms of sensor delay took
+   the force from 0 to 15 N in 0.4 s (safety abort); the same gain without
+   the delay held 2 N with 0.1 N of noise. Commanding a *position* into the surface is the extreme
    case (infinite gain): 0.5 mm of tracking error is already 10–50 N.
    → `max_stable_force_gain(k_env, T)` gives the gain. Use ~1/5 of the limit.
    The simulation reproduces it: `python3 -m applications_helene.insertion_sim`.
@@ -46,32 +52,49 @@ Force sensor on the end effector → CAN → ESP → micro-ROS (ROS 2) → `ros1
    world frame (`sensor_frame` via TF). If the sign is wrong the force loop
    becomes positive feedback: pressing makes it press harder. **Check:** push
    the screw tip up with a finger, then `rostopic echo /force_control/fz` must go positive.
-   Otherwise set `force_sign:=-1`.
+   Otherwise set `force_sign:=-1`. (In Gazebo the simulated sensor needs
+   `force_sign:=1`; with `-1` the admittance demo moved *against* the push.)
 
-4. **Contact loss with an integrator.** When the screw drops into the hole the
-   force goes to 0. A PI force controller (or a high gain) then accelerates down
-   at full speed and slams into the bottom. Here the z speed is clamped
-   (`max_z_speed`), there is no integrator, and the hole is detected and
+4. **Contact loss with an integrator or a fast "find the surface again".** When
+   the screw drops into the hole (or bounces) the force goes to 0. A PI force
+   controller, a high gain, or a fast re-approach then drives down at full
+   speed, and with 0.1 s of latency it keeps going after the contact is back:
+   the overshoot is `k_env·v·T`. In Gazebo, re-approaching at 2 mm/s after a
+   contact loss produced 15 N spikes. Here there is no integrator, the
+   re-approach uses the approach speed (1 mm/s), and the hole is detected and
    handled as its own state.
 
-Also noticed (not changed): in `my_robot_vel.cpp` `read()` converts the
-measured velocity with `40/(71583·2π)` but `write()` uses `71583/π·2/40`
-(operator precedence). The two are not inverse of each other: they differ by
-a factor of π² ≈ 9.9. Check against the firmware which one is right.
+Also noticed (not changed):
+- `my_robot_vel.cpp`: `read()` converts the measured velocity with
+  `40/(71583·2π)` but `write()` uses `71583/π·2/40` (operator precedence).
+  The two are not inverse of each other: they differ by a factor of
+  π² ≈ 9.9. Check against the firmware which one is right.
+- MoveIt Servo resolves `cartesian_command_in_topic` in its private namespace,
+  so with `helene_servoing.yaml` it listens on
+  `/servo_server/servo_server/delta_twist_cmds`. `force_control.launch` fixes
+  that for the force nodes; `spacenav_cpp.launch` probably has the same problem.
+- `realrobot.launch` loads `ros_controllers.yaml`, which has no `effort_group`.
+- `helene_hw.urdf` declares the transmissions and `gazebo_ros_control` twice,
+  the second time in the root namespace. That is harmless with effort joints,
+  but with velocity joints it overwrites every command with 0
+  (`sim_velocity_urdf.py` removes it for the test bench).
 
 ## Algorithm (screw insertion)
 
 ```
 TARE      arm still, average 100 samples -> bias (weight of tool + screw)
-APPROACH  v_z = -1 mm/s until fz > 1 N for 3 samples   -> remember contact point
+APPROACH  v_z = -1 mm/s (x/y held) until fz > 1 N for 3 samples -> remember contact point
 SEARCH    z : v_z = -Kf·(F_ref - fz), clamped, deadband   (holds ~2 N, never position)
+              contact lost -> down at the approach speed, not faster
           xy: Archimedean spiral around the contact point, r = pitch·θ/2π,
               constant tangential speed, advances only while fz ≈ F_ref
-          hole  <=> fz < 0.35·F_ref  AND  z dropped > 0.8 mm below contact
-                    (or: tip pushed sideways with no load below = caught on the hole wall)
-          fail  <=> r > max radius, or blocked sideways with load
-INSERT    xy velocity 0 (the hole guides the screw), z down slowly
-          until insert_depth, or fz > insert_max_force (thread / seated)
+          hole  <=> fz < 0.6·F_ref  AND  z dropped > 0.8 mm below contact
+                    (or: pushed sideways > 4 N with no load below, or while already
+                     0.3 mm down = tip caught on the hole edge)
+          fail  <=> r > max radius, or blocked sideways on the flat surface
+INSERT    push down with ~3 N, x/y yield to the lateral force (the hole edge
+          pushes the tip towards the centre), until insert_depth, or no more
+          progress for 1 s / fz > 6 N below 1 mm depth (seated, thread reached)
 ALWAYS    |F| > abort_force, stale sensor data, TF error  -> stop
 ```
 
@@ -94,17 +117,41 @@ down by the same factor, and everything gets much more forgiving. Lowering
 the latency (raising the 30 Hz loop in `my_robot_vel.cpp`, a direct ROS 2
 path without the bridge) helps in the same way.
 
-Simulation results (20 N/mm, 80 ms + 30 Hz loop):
+Default `force_gain` is 0.05 mm/s per N. With 0.1 s of latency it is well
+damped up to about 60 N/mm and stable up to about 300 N/mm. The price is a
+slower force settling (about 1 s at 20 N/mm). Raise it only after measuring `k_env` and `T`.
 
-| | result | peak Fz |
+## Test results
+
+**Offline model** (`python3 -m pytest test/`, 43 tests; stiff surface,
+80 ms latency, 30 Hz loop). The insertion succeeds for 5, 20 and 50 N/mm and
+hole offsets up to 2 mm, with 50 and 100 ms of latency (36/36 cases, peak
+force < 10 N). At 150 ms, 13/36 cases fail, mostly at 50 N/mm. A gain of
+2 mm/s per N bounces on and off the surface (63 contact losses).
+
+**Gazebo** (`force_simulation.launch` + `gazebo_force_test.py`). The arm runs
+with the real-robot controllers and Servo settings, with stepper-like velocity
+joints. The simulated force sensor runs at 100 Hz on the screw. The plate is a
+single mesh with a 4 mm hole (0.5 mm chamfer, 3 mm deep, contact kp 20 N/mm).
+The start misalignment comes from MoveIt and was 1.8 to 4.4 mm.
+
+| test | sensor delay | result |
 |---|---|---|
-| tuned, Kf = 0.15 mm/s/N | hole found, inserted | ~6 N (at the bottom of the hole) |
-| naive, Kf = 2 mm/s/N | oscillation grows, abort | > 17 N |
-| naive, same gain, ~10 ms latency | works | ~6 N |
+| insertion ×3 | 0 | 3/3 hole found and inserted, tip 0.5 mm from the hole centre, max 3.4 N |
+| insertion ×3 | 100 ms | 3/3 inserted 4 mm, max 4.4 N |
+| press (2 N on the flat plate, 24 s) | 0 / 100 ms | mean 2.1 / 2.2 N, std 0.34 / 0.14 N, never lost contact |
+| press, Kf = 2 mm/s/N | 0 | stable, std 0.1 N |
+| press, Kf = 2 mm/s/N, fast re-approach | 100 ms | **0 → 15 N in 0.4 s, abort** |
+| admittance, 6 N push for 2 s | 0 | moved 25 mm along the push, 0 mm sideways, 0.7 mm drift after release |
 
-The tests sweep 5/20/50 N/mm stiffness and hole offsets up to 2 mm. With
-50 N/mm *and* 100 ms latency the default gain gets close to the limit and starts
-failing: in that case lower `force_gain` or add compliance.
+In earlier runs, a misalignment above the search radius (5 mm in the test)
+ended in a clean `FAILED no hole found` at about 3 N.
+
+To run it yourself:
+```
+roslaunch applications_helene force_simulation.launch [sensor_delay:=0.1] [gazebo_gui:=true]
+rosrun applications_helene gazebo_force_test.py insertion   # or press / admittance
+```
 
 ## Running
 

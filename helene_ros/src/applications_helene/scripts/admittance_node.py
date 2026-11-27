@@ -26,9 +26,10 @@ def main():
     state_pub = rospy.Publisher("~state", String, queue_size=1, latch=True)
     rospy.on_shutdown(io.stop)
 
-    rospy.loginfo("waiting for force data...")
-    while not rospy.is_shutdown() and not io.fresh():
-        rospy.sleep(0.05)
+    rospy.loginfo("waiting for force data and TF...")
+    while not rospy.is_shutdown() and not io.wait_ready(need_tool=False):
+        rospy.logwarn("no force data on the topic, or TF to '%s' missing; still waiting",
+                      io.world_frame)
     rospy.loginfo("taring - do not touch the sensor")
     state_pub.publish("TARE")
 

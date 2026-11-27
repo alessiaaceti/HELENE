@@ -82,15 +82,17 @@ def test_force_stays_near_target_while_searching():
     assert max(settled) < 3.0
 
 
-def test_naive_high_gain_explodes():
+def test_naive_high_gain_oscillates():
     """Reproduces the 'force explodes' behaviour: gain above the stability
-    limit for 20 N/mm and ~100 ms of latency. The force oscillation grows
-    until the safety abort trips."""
+    limit for 20 N/mm and ~100 ms of latency. The force oscillates, the
+    screw bounces on and off the surface and the peaks are several times
+    the target force."""
     p = InsertionParams(force_gain=0.002, max_z_speed=0.02)
     ctrl, trace = simulate(p)
     search = [r[5] for r in trace if r[1] == SEARCH]
-    assert ctrl.status.state == FAILED
-    assert max(search) > 3 * p.target_force
+    losses = sum(1 for a, b in zip(search, search[1:]) if a > 0 and b == 0)
+    assert losses > 10
+    assert max(search) > 2 * p.target_force
 
 
 def test_same_naive_gain_is_fine_without_latency():

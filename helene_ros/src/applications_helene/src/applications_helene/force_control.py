@@ -188,7 +188,7 @@ class InsertionParams:
     contact_samples: int = 3          # consecutive samples above threshold
     # --- force regulation while searching ---
     target_force: float = 2.0         # N pressing force during the spiral
-    force_gain: float = 0.00015       # m/s per N. Use max_stable_force_gain()
+    force_gain: float = 0.00005       # m/s per N. Use max_stable_force_gain()
     force_deadband: float = 0.15      # N
     max_z_speed: float = 0.002        # m/s, also the speed when contact is lost
     # --- spiral ---
@@ -198,16 +198,24 @@ class InsertionParams:
     spiral_max_radius: float = 0.004  # m, give up beyond this
     xy_gain: float = 4.0              # 1/s, P term tracking the spiral
     # --- hole detection ---
-    hole_force_ratio: float = 0.35    # fz below this * target_force ...
+    hole_force_ratio: float = 0.6     # fz below this * target_force ...
     hole_depth: float = 0.0008        # ... AND tool this far below contact height
     hole_samples: int = 3
+    lost_force_ratio: float = 0.35    # fz below this * target_force: contact lost,
+                                      # descend at max_z_speed instead of the slow gain
     # --- insertion ---
-    insert_speed: float = 0.001
+    insert_speed: float = 0.001       # m/s down while there is no load
+    insert_force: float = 3.0         # N, push force while inserting
+    insert_xy_gain: float = 0.0002    # m/s per N: x/y yield to the hole walls
     insert_depth: float = 0.004       # m below contact height, then DONE
-    insert_max_force: float = 6.0     # N, bottomed out / thread engaged -> DONE
+    min_insert_depth: float = 0.001   # seated/stalled above this depth -> DONE
+    insert_max_force: float = 6.0     # N, at/after min_insert_depth -> DONE (bottom/thread)
+    stall_time: float = 1.0           # s without progress at insert_force -> seated
+    insert_timeout: float = 15.0      # s
     # --- safety ---
     abort_force: float = 15.0         # N on |F|, anywhere -> FAILED, stop
     max_lateral_force: float = 4.0    # N on |Fxy| while searching: blocked
+    rim_depth: float = 0.0003         # blocked AND this far down -> tip is on the hole rim
 
 
 @dataclass
@@ -230,7 +238,8 @@ class ScrewInsertion:
     Hole:     the screw tip drops into the hole -> fz collapses AND the tool
               moves down by more than ``hole_depth``. Requiring both rejects
               noise spikes (force only) and surface slope (depth only).
-    INSERT:   stop the spiral, hold x/y at the hole, go down slowly until the
+    INSERT:   stop the spiral, push down with insert_force while x/y yield to
+              the lateral force (the hole edge centres the screw), until the
               depth is reached or the force rises again (thread engaged).
 
     Call ``step(f_world, pos_world, dt)`` at a fixed rate; it returns the
@@ -246,6 +255,10 @@ class ScrewInsertion:
         self._theta = 0.0
         self._contact = None
         self._drop_xy = None
+        self._approach_xy = None
+        self._t_insert = 0.0
+        self._stall_t = 0.0
+        self._stall_depth = -1.0
 
     # -- helpers ----------------------------------------------------------
     def _set(self, state, msg=""):
@@ -263,17 +276,52 @@ class ScrewInsertion:
         """v_z from the force error. Positive error (pressing too little)
         -> move down (negative v_z)."""
         p = self.p
-        if fz < p.hole_force_ratio * p.target_force:
+        if fz < p.lost_force_ratio * p.target_force:
             # Contact lost (hole, or edge of the part): the low gain would
-            # follow the surface down far too slowly, so descend at a fixed
-            # speed. Not a stability problem: there is no contact to bounce on.
-            return -p.max_z_speed
+            # follow the surface down far too slowly, so descend at the
+            # approach speed. Not faster: with ~0.1 s of latency the arm
+            # keeps going after contact is back, and every mm/s becomes
+            # k_env * v * T newtons of overshoot.
+            return -p.approach_speed
         err = deadband(p.target_force - fz, p.force_deadband)
         return clamp(-p.force_gain * err, p.max_z_speed)
 
     def fail(self, msg):
         """External abort (stale sensor, tf error...)."""
         self._set(FAILED, msg)
+
+    def _insert(self, f, fz, pos_world, dt):
+        """Push down with a limited force while x/y yield to the lateral
+        force (admittance): the hole edge pushes the tip towards the hole
+        centre, so the screw centres itself instead of being pressed
+        against the wall."""
+        p, st = self.p, self.status
+        depth = self._contact[2] - pos_world[2]
+        self._t_insert += dt
+        if depth >= p.insert_depth:
+            self._set(DONE, "inserted %.1f mm" % (1e3 * depth))
+            return [0.0, 0.0, 0.0]
+        if fz > p.insert_max_force and depth >= p.min_insert_depth:
+            self._set(DONE, "force %.1f N at depth %.1f mm (seated/thread)" % (fz, 1e3 * depth))
+            return [0.0, 0.0, 0.0]
+        # stall: no progress while pushing with the insertion force
+        if depth > self._stall_depth + 0.0001:
+            self._stall_depth, self._stall_t = depth, 0.0
+        elif fz > 0.5 * p.insert_force:
+            self._stall_t += dt
+        if self._stall_t > p.stall_time and depth >= p.min_insert_depth:
+            self._set(DONE, "seated at depth %.1f mm (%.1f N)" % (1e3 * depth, fz))
+            return [0.0, 0.0, 0.0]
+        if self._t_insert > p.insert_timeout:
+            self._set(FAILED, "insertion stuck at depth %.1f mm" % (1e3 * depth))
+            return [0.0, 0.0, 0.0]
+        if fz < p.contact_force:
+            vz = -p.insert_speed
+        else:
+            vz = clamp(-p.force_gain * (p.insert_force - fz), p.insert_speed)
+        vx = clamp(p.insert_xy_gain * f[0], p.spiral_speed)
+        vy = clamp(p.insert_xy_gain * f[1], p.spiral_speed)
+        return [vx, vy, vz]
 
     # -- main step --------------------------------------------------------
     def step(self, f_world, pos_world, dt):
@@ -296,29 +344,42 @@ class ScrewInsertion:
             return [0.0, 0.0, 0.0]
 
         if st.state == APPROACH:
+            # hold x/y where the approach started: otherwise tracking errors
+            # of the arm add to the misalignment the spiral has to cover
+            if self._approach_xy is None:
+                self._approach_xy = [pos_world[0], pos_world[1]]
+            vx = clamp(p.xy_gain * (self._approach_xy[0] - pos_world[0]), p.spiral_speed)
+            vy = clamp(p.xy_gain * (self._approach_xy[1] - pos_world[1]), p.spiral_speed)
             self._count = self._count + 1 if fz > p.contact_force else 0
             if self._count >= p.contact_samples:
                 self._contact = list(pos_world)
                 st.contact_xyz = list(pos_world)
                 self._theta = 0.0
                 ez = p.expected_surface_z
-                if ez is not None and pos_world[2] < ez - p.hole_depth:
+                if ez is not None:
+                    # depths are measured from the known surface, not from
+                    # where contact happened (the tip may touch the hole rim)
                     self._contact[2] = ez
+                if ez is not None and pos_world[2] < ez - p.hole_depth:
                     st.hole_xy = [pos_world[0], pos_world[1]]
                     self._set(INSERT, "contact %.1f mm below the surface: "
                               "already in the hole" % (1e3 * (ez - pos_world[2])))
                     return [0.0, 0.0, 0.0]
                 self._set(SEARCH, "contact at z=%.4f" % pos_world[2])
                 return [0.0, 0.0, 0.0]
-            return [0.0, 0.0, -p.approach_speed]
+            return [vx, vy, -p.approach_speed]
 
         if st.state == SEARCH:
             f_lat = math.hypot(f[0], f[1])
-            if f_lat > p.max_lateral_force and fz < p.hole_force_ratio * p.target_force:
-                # No load from below but pushed sideways: the tip dropped into
-                # the hole and the spiral is dragging it against the wall.
+            depth = self._contact[2] - pos_world[2]
+            if f_lat > p.max_lateral_force and (
+                    fz < p.hole_force_ratio * p.target_force or depth > p.rim_depth):
+                # Pushed sideways with no load from below (tip dropped into the
+                # hole, spiral drags it against the wall), or sideways while
+                # already lower than the surface (tip sitting on the rim).
                 st.hole_xy = [pos_world[0], pos_world[1]]
-                self._set(INSERT, "hole (tip caught on wall, |Fxy|=%.1f N)" % f_lat)
+                self._set(INSERT, "hole (tip against the hole edge, |Fxy|=%.1f N, "
+                          "%.1f mm down)" % (f_lat, 1e3 * depth))
                 return [0.0, 0.0, 0.0]
             if f_lat > p.max_lateral_force:
                 self._set(FAILED, "blocked sideways: |Fxy|=%.1f N (stuck on an edge, "
@@ -326,7 +387,6 @@ class ScrewInsertion:
                           % f_lat)
                 return [0.0, 0.0, 0.0]
             vz = self._force_z_velocity(fz)
-            depth = self._contact[2] - pos_world[2]
             dropped = fz < p.hole_force_ratio * p.target_force
             if dropped and self._drop_xy is None:
                 self._drop_xy = [pos_world[0], pos_world[1]]   # where it fell
@@ -357,15 +417,6 @@ class ScrewInsertion:
             return [clamp(vx, lim), clamp(vy, lim), vz]
 
         if st.state == INSERT:
-            # x/y velocity zero: the hole walls guide the screw, commanding
-            # x/y here would only press it against the wall.
-            depth = self._contact[2] - pos_world[2]
-            if depth >= p.insert_depth:
-                self._set(DONE, "inserted %.1f mm" % (1e3 * depth))
-                return [0.0, 0.0, 0.0]
-            if fz > p.insert_max_force:
-                self._set(DONE, "force %.1f N at depth %.1f mm (seated/thread)" % (fz, 1e3 * depth))
-                return [0.0, 0.0, 0.0]
-            return [0.0, 0.0, -p.insert_speed]
+            return self._insert(f, fz, pos_world, dt)
 
         return [0.0, 0.0, 0.0]

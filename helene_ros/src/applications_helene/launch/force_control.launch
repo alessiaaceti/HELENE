@@ -20,16 +20,20 @@
     that the topic shows up here with `rostopic hz /force_sensor/wrench`.
   -->
   <arg name="mode" default="admittance"/>
+  <!-- sim:=true -> Gazebo from simulation.launch (joint POSITION group controller) -->
   <arg name="sim" default="false"/>
+  <arg name="load_planning_context" default="$(eval not sim)"/>
   <arg name="force_topic" default="/force_sensor/wrench"/>
   <arg name="msg_type" default="wrench"/>          <!-- wrench | vector3_stamped | vector3 -->
   <arg name="sensor_frame" default=""/>            <!-- "" = use header.frame_id -->
   <arg name="tool_frame" default="axis_6"/>
   <arg name="force_sign" default="1.0"/>
   <arg name="force_scale" default="1.0"/>
+  <!-- any other node parameter as a YAML dict, e.g. "{expected_surface_z: 0.05, target_force: 1.5}" -->
+  <arg name="extra_params" default="{}"/>
 
   <!-- robot_description_semantic + kinematics for MoveIt Servo -->
-  <include unless="$(arg sim)" file="$(find moveit_helene)/launch/planning_context.launch"/>
+  <include if="$(arg load_planning_context)" file="$(find moveit_helene)/launch/planning_context.launch"/>
 
   <node name="servo_server" pkg="moveit_servo" type="servo_server" output="screen">
     <param name="parameter_ns" type="string" value="servo_server"/>
@@ -39,6 +43,9 @@
          POSITIONS (right for the Gazebo position controller only): fed to the
          velocity controller the arm moves with speed = its own joint angle,
          which grows exponentially and runs away. -->
+    <!-- servo_server resolves topics in its private namespace: with the yaml
+         value it would listen on /servo_server/servo_server/delta_twist_cmds -->
+    <param name="cartesian_command_in_topic" value="delta_twist_cmds"/>
     <param unless="$(arg sim)" name="use_gazebo" value="false"/>
     <param unless="$(arg sim)" name="publish_joint_positions" value="false"/>
     <param unless="$(arg sim)" name="publish_joint_velocities" value="true"/>
@@ -56,10 +63,11 @@
     <param name="force_sign" value="$(arg force_sign)"/>
     <param name="force_scale" value="$(arg force_scale)"/>
     <param name="twist_topic" value="/servo_server/delta_twist_cmds"/>
-    <!-- insertion tuning (SI units), see force_control.py / FORCE_CONTROL.md -->
-    <param name="target_force" value="2.0"/>
-    <param name="force_gain" value="0.00015"/>
+    <!-- insertion tuning (SI units): defaults are in InsertionParams
+         (force_control.py), override them with extra_params. Do not add
+         <param> tags for them here: a <param> wins over extra_params. -->
     <param name="expected_stiffness" value="20000.0"/>
     <param name="expected_latency" value="0.1"/>
+    <rosparam subst_value="true">$(arg extra_params)</rosparam>
   </node>
 </launch>
