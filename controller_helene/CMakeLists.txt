@@ -22,6 +22,7 @@ find_package(orocos_kdl REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
 
 # ==========================================
 # 2. Hardware Interface Library
@@ -91,6 +92,13 @@ ament_target_dependencies(raw_meas_to_wrench rclcpp geometry_msgs)
 ament_target_dependencies(helene_force_servo_teleop rclcpp geometry_msgs std_msgs tf2_ros tf2_geometry_msgs)
 
 
+# --- Screw insertion (force-guided, spiral search) ---
+add_executable(screw_insertion_node src/screw_insertion_node.cpp)
+target_include_directories(screw_insertion_node PRIVATE include)
+target_include_directories(screw_insertion_node PRIVATE ${orocos_kdl_INCLUDE_DIRS})
+target_link_libraries(screw_insertion_node ${orocos_kdl_LIBRARIES})
+ament_target_dependencies(screw_insertion_node rclcpp geometry_msgs sensor_msgs std_msgs std_srvs kdl_parser tf2 tf2_ros tf2_geometry_msgs)
+
 # ==========================================
 # 4. Plugins Export
 # ==========================================
@@ -115,10 +123,13 @@ install(
     helene_joystick_teleop
     helene_force_servo_teleop
     raw_meas_to_wrench
+    screw_insertion_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
 # Install Directories & Files
+install(PROGRAMS scripts/sim_go_to_start.py DESTINATION lib/${PROJECT_NAME})
+
 install(
   DIRECTORY include/
   DESTINATION include/${PROJECT_NAME}

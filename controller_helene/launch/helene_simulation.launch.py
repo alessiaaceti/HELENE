@@ -2,7 +2,9 @@ import os
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription, RegisterEventHandler, TimerAction
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, RegisterEventHandler, TimerAction
+from launch.conditions import IfCondition, UnlessCondition
+from launch.substitutions import LaunchConfiguration
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command
 from launch_ros.actions import Node
@@ -26,7 +28,6 @@ def generate_launch_description():
     pkg_helene_moveit_config = get_package_share_directory('helene_moveit_config')
     
     xacro_file = os.path.join(pkg_hw_description, 'urdf', 'helene_hw.urdf.xacro')
-    world_file = os.path.join(pkg_controller_helene, 'worlds', 'helene_world.sdf')
     
     # Load the SRDF Semantic file for MoveIt 2 from the correct package
     srdf_file = os.path.join(pkg_helene_moveit_config, 'config', 'helene.srdf')
@@ -41,7 +42,17 @@ def generate_launch_description():
 
     # Process Xacro dynamically to generate robot description
     robot_description = ParameterValue(
-        Command(['xacro ', xacro_file, ' use_mock_hardware:=', use_mock_hardware]),
+        Command(['xacro ', xacro_file, ' use_mock_hardware:=', use_mock_hardware,
+                 ' use_ft_sensor:=true',
+                 ' sensor_stiffness:=', LaunchConfiguration('sensor_stiffness')]),
+        value_type=str
+    )
+
+    # MoveIt and Servo plan on the rigid arm (q7 fixed): the sensor spring is only a
+    # simulation detail of Gazebo and robot_state_publisher, not a joint to control.
+    robot_description_rigid = ParameterValue(
+        Command(['xacro ', xacro_file, ' use_mock_hardware:=', use_mock_hardware,
+                 ' use_ft_sensor:=true']),
         value_type=str
     )
 
@@ -49,7 +60,7 @@ def generate_launch_description():
     gazebo = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([os.path.join(
             get_package_share_directory('ros_gz_sim'), 'launch', 'gz_sim.launch.py')]),
-        launch_arguments={'gz_args': f'-r {world_file}'}.items(),
+        launch_arguments={'gz_args': [LaunchConfiguration('gz_flags'), ' ', LaunchConfiguration('world')]}.items(),
     )
 
     # 2. Spawn Robot Entity in Ignition Gazebo
@@ -155,7 +166,7 @@ def generate_launch_description():
         executable='move_group',
         output='screen',
         parameters=[
-            {'robot_description': robot_description},
+            {'robot_description': robot_description_rigid},
             {'robot_description_semantic': robot_description_semantic_config},
             robot_description_kinematics,
             joint_limits_yaml if joint_limits_yaml else {},
@@ -173,7 +184,7 @@ def generate_launch_description():
         name='rviz2',
         output='screen',
         parameters=[
-            {'robot_description': robot_description},
+            {'robot_description': robot_description_rigid},
             {'robot_description_semantic': robot_description_semantic_config},
             robot_description_kinematics,
             joint_limits_yaml if joint_limits_yaml else {},
@@ -183,6 +194,7 @@ def generate_launch_description():
             sim_time_param
         ],
         arguments=['-d', os.path.join(pkg_helene_moveit_config, 'config', 'moveit.rviz')],
+        condition=IfCondition(LaunchConfiguration('rviz')),
     )
 
     # 7. Joint State Broadcaster Spawner
@@ -194,23 +206,28 @@ def generate_launch_description():
     )
 
     # 8. Post-Broadcaster Event Handler
+    # servo_mode:=true loads the velocity controller that MoveIt Servo writes to
+    # (/helene_velocity_controller/commands) instead of the trajectory controller:
+    # needed for hand guiding and screw insertion. Both claim the same joint velocity
+    # interfaces, so only one of them is started.
+    trajectory_controller = Node(
+        package="controller_manager",
+        executable="spawner",
+        arguments=["helene_trajectory_controller"],
+        parameters=[sim_time_param],
+        condition=UnlessCondition(LaunchConfiguration('servo_mode'))
+    )
+    velocity_controller = Node(
+        package="controller_manager",
+        executable="spawner",
+        arguments=["helene_velocity_controller"],
+        parameters=[sim_time_param],
+        condition=IfCondition(LaunchConfiguration('servo_mode'))
+    )
     load_controllers = RegisterEventHandler(
         event_handler=OnProcessExit(
             target_action=joint_state_broadcaster,
-            on_exit=[
-                Node(
-                    package="controller_manager",
-                    executable="spawner",
-                    arguments=["helene_trajectory_controller"],
-                    parameters=[sim_time_param]
-                ),
-                Node(
-                    package="controller_manager",
-                    executable="spawner",
-                    arguments=["helene_force_broadcaster"],
-                    parameters=[sim_time_param]
-                )
-            ],
+            on_exit=[trajectory_controller, velocity_controller],
         )
     )
 
@@ -221,7 +238,7 @@ def generate_launch_description():
         name='servo_node',
         output='screen',
         parameters=[
-            {'robot_description': robot_description},
+            {'robot_description': robot_description_rigid},
             {'robot_description_semantic': robot_description_semantic_config},
             robot_description_kinematics,
             joint_limits_yaml if joint_limits_yaml else {},
@@ -235,10 +252,49 @@ def generate_launch_description():
         package='controller_helene',
         executable='helene_force_servo_teleop',
         output='screen',
-        parameters=[sim_time_param]
+        parameters=[sim_time_param],
+        condition=IfCondition(LaunchConfiguration('teleop'))
+    )
+
+    # MoveIt Servo (Humble) ignores commands until it is started
+    start_servo = ExecuteProcess(
+        cmd=['ros2', 'service', 'call', '/servo_node/start_servo', 'std_srvs/srv/Trigger', '{}'],
+        output='screen'
+    )
+
+    # 11. Force-guided screw insertion (approach, spiral search, insert), off by default
+    screw_insertion = Node(
+        package='controller_helene',
+        executable='screw_insertion_node',
+        output='screen',
+        parameters=[sim_time_param, {'auto_start': False,
+                    'direct_joint_control': True,
+                    'robot_description': robot_description_rigid,
+                    # the Gazebo F/T sensor reports the force of the tool on the arm
+                    # (child_to_parent) in the sensor frame: no sign flip
+                    'sensor_sign_x': 1.0, 'sensor_sign_y': 1.0, 'sensor_sign_z': 1.0,
+                    'tool_tip_offset_z': 0.06,
+                    'expected_surface_z': ParameterValue(LaunchConfiguration('surface_z'), value_type=float),
+                    'sensor_delay': ParameterValue(LaunchConfiguration('sensor_delay'), value_type=float),
+                    }],
+        condition=IfCondition(LaunchConfiguration('insertion'))
     )
 
     return LaunchDescription([
+        # rviz:=false and gz_flags:='-r -s' run everything headless (CI / no display)
+        DeclareLaunchArgument('rviz', default_value='true'),
+        DeclareLaunchArgument('gz_flags', default_value='-r'),
+        DeclareLaunchArgument('world', default_value=os.path.join(pkg_controller_helene, 'worlds', 'helene_world.sdf')),
+        # force sensor stiffness [N/m]; 0 = rigid. Without compliance the simulated contact
+        # is infinitely stiff: use ~20000 (20 N/mm) for force-control tests
+        DeclareLaunchArgument('sensor_stiffness', default_value='0'),
+        # known plate height for the insertion node ('nan' = unknown: spiral search from contact)
+        DeclareLaunchArgument('surface_z', default_value='0.05'),
+        # extra delay [s] on the force signal, to test the loop with the latency of the real chain
+        DeclareLaunchArgument('sensor_delay', default_value='0.0'),
+        DeclareLaunchArgument('servo_mode', default_value='false'),
+        DeclareLaunchArgument('teleop', default_value='true'),
+        DeclareLaunchArgument('insertion', default_value='false'),
         gazebo,
         robot_state_publisher,
         spawn_entity,
@@ -260,5 +316,10 @@ def generate_launch_description():
         TimerAction(
             period=8.0, 
             actions=[servo_node, helene_force_servo_teleop]
-        )
+        ),
+        # Servo needs a moment to load the robot model before it accepts start_servo
+        TimerAction(period=24.0, actions=[start_servo]),
+        # The insertion node tares at start: it waits for ~/start, which
+        # sim_go_to_start.py --start calls once the arm is at rest above the plate
+        TimerAction(period=25.0, actions=[screw_insertion])
     ])

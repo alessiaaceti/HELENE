@@ -4,6 +4,12 @@
   <xacro:property name="mesh_scale" value="0.001 0.001 0.001" />
   <xacro:arg name="use_mock_hardware" default="false" />
   <xacro:arg name="use_ft_sensor" default="false" />
+  <!-- Simulation only: stiffness [N/m] of the force sensor. 0 = rigid (fixed joint q7). A positive
+       value turns q7 into a spring-loaded prismatic joint along the tool axis, like the
+       printed sensor that deflects under load. Without it the simulated contact is perfectly rigid
+       and any velocity command into the surface produces kilonewtons. -->
+  <xacro:arg name="sensor_stiffness" default="0" />
+  <xacro:property name="sensor_k" value="$(arg sensor_stiffness)" />
   
   <xacro:macro name="create_link" params="link_name mesh_file mass ixx iyy izz">
     <link name="${link_name}">
@@ -103,11 +109,45 @@
     <limit effort="1000.0" lower="-3.141" upper="3.141" velocity="1.0" />
   </joint>
   
-  <joint name="q7" type="fixed">
-    <parent link="axis_5"/>
-    <child link="axis_6"/>
-    <origin xyz="0 0 0.05" rpy="0 0 0"/> 
-  </joint>
+  <xacro:if value="${sensor_k == 0}">
+    <joint name="q7" type="fixed">
+      <parent link="axis_5"/>
+      <child link="axis_6"/>
+      <origin xyz="0 0 0.05" rpy="0 0 0"/> 
+    </joint>
+  </xacro:if>
+  <xacro:unless value="${sensor_k == 0}">
+    <!-- 3-axis spring stack (x, y, z): the printed sensor deflects in every direction. Light
+         intermediate bodies; all damped at 70 % of critical. -->
+    <xacro:macro name="spring_link" params="name">
+      <link name="${name}">
+        <inertial>
+          <mass value="0.05"/>
+          <inertia ixx="1e-6" ixy="0" ixz="0" iyy="1e-6" iyz="0" izz="1e-6"/>
+        </inertial>
+      </link>
+    </xacro:macro>
+    <xacro:macro name="spring_joint" params="name parent child axis xyz">
+      <joint name="${name}" type="prismatic">
+        <parent link="${parent}"/>
+        <child link="${child}"/>
+        <origin xyz="${xyz}" rpy="0 0 0"/>
+        <axis xyz="${axis}"/>
+        <limit effort="1000.0" lower="-0.01" upper="0.01" velocity="1.0"/>
+        <dynamics damping="${2 * 0.7 * sqrt(sensor_k * 0.11)}"/>
+      </joint>
+      <gazebo reference="${name}">
+        <springStiffness>${sensor_k}</springStiffness>
+        <springReference>0</springReference>
+        <preserveFixedJoint>true</preserveFixedJoint>
+      </gazebo>
+    </xacro:macro>
+    <xacro:spring_link name="sensor_x_link"/>
+    <xacro:spring_link name="sensor_y_link"/>
+    <xacro:spring_joint name="q7x" parent="axis_5" child="sensor_x_link" axis="1 0 0" xyz="0 0 0.05"/>
+    <xacro:spring_joint name="q7y" parent="sensor_x_link" child="sensor_y_link" axis="0 1 0" xyz="0 0 0"/>
+    <xacro:spring_joint name="q7" parent="sensor_y_link" child="axis_6" axis="0 0 1" xyz="0 0 0"/>
+  </xacro:unless>
 
   <ros2_control name="HeleneControl" type="system">
     <hardware>
@@ -136,6 +176,20 @@
     <xacro:configure_joint joint_name="q4"/>
     <xacro:configure_joint joint_name="q5"/>
     <xacro:configure_joint joint_name="q6"/>
+    <xacro:unless value="${sensor_k == 0}">
+      <joint name="q7x">
+        <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+        <state_interface name="velocity"/>
+      </joint>
+      <joint name="q7y">
+        <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+        <state_interface name="velocity"/>
+      </joint>
+      <joint name="q7">
+        <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+        <state_interface name="velocity"/>
+      </joint>
+    </xacro:unless>
     
     <xacro:if value="$(arg use_ft_sensor)">
       <sensor name="tcp_force_torque_sensor">
