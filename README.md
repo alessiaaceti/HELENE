@@ -54,6 +54,9 @@ $ rosrun applications_helene demoSpeed
 ```
 demoSpiral draws a spiral, demoSpeed executes the same trajectory in full and reduced speed.
 
+### Force control (hand guiding, screw insertion)
+With a force sensor on the end effector the arm can be pushed by hand or insert a screw with a force-regulated spiral search. See [FORCE_CONTROL.md](helene_ros/src/applications_helene/FORCE_CONTROL.md).
+
 ## Python Interface
 
 Inside the applications_helene\scripts folder is the Python library helpy, which allows easy programming of the robot arm. An example is located in main. When the example is executed, the robot arm should move and also the LEDs should light up. Use this script as inspiration and show what the robot arm can do!\

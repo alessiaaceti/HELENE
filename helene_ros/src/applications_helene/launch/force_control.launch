@@ -1,0 +1,65 @@
+<launch>
+  <!--
+    Force-guided motion with the force sensor on the end effector.
+      mode:=admittance  demo 1, push the sensor to move the arm
+      mode:=insertion   demo 2, screw insertion with spiral search
+
+    Real robot (3 terminals):
+      roslaunch controller_helene robot.launch                 (rosserial)
+      roslaunch moveit_helene hardware_interface_jog.launch    (starts effort_group,
+                                                                 a joint VELOCITY controller)
+      roslaunch applications_helene force_control.launch mode:=admittance
+    Note: realrobot.launch cannot be used for this, its ros_controllers.yaml
+    has no effort_group.
+
+    Simulation: start simulation.launch, switch to effort_group as described
+    in the README, then this file with sim:=true.
+
+    The force data comes from the ESP over micro-ROS, i.e. into ROS 2. This
+    stack is ROS 1 (noetic), so run ros1_bridge (dynamic_bridge) and check
+    that the topic shows up here with `rostopic hz /force_sensor/wrench`.
+  -->
+  <arg name="mode" default="admittance"/>
+  <arg name="sim" default="false"/>
+  <arg name="force_topic" default="/force_sensor/wrench"/>
+  <arg name="msg_type" default="wrench"/>          <!-- wrench | vector3_stamped | vector3 -->
+  <arg name="sensor_frame" default=""/>            <!-- "" = use header.frame_id -->
+  <arg name="tool_frame" default="axis_6"/>
+  <arg name="force_sign" default="1.0"/>
+  <arg name="force_scale" default="1.0"/>
+
+  <!-- robot_description_semantic + kinematics for MoveIt Servo -->
+  <include unless="$(arg sim)" file="$(find moveit_helene)/launch/planning_context.launch"/>
+
+  <node name="servo_server" pkg="moveit_servo" type="servo_server" output="screen">
+    <param name="parameter_ns" type="string" value="servo_server"/>
+    <rosparam command="load" file="$(find moveit_helene)/config/helene_servoing.yaml"/>
+    <!-- On the real robot effort_group is a JointGroupVelocityController: it
+         must receive joint VELOCITIES. helene_servoing.yaml publishes joint
+         POSITIONS (right for the Gazebo position controller only): fed to the
+         velocity controller the arm moves with speed = its own joint angle,
+         which grows exponentially and runs away. -->
+    <param unless="$(arg sim)" name="use_gazebo" value="false"/>
+    <param unless="$(arg sim)" name="publish_joint_positions" value="false"/>
+    <param unless="$(arg sim)" name="publish_joint_velocities" value="true"/>
+  </node>
+
+  <arg name="node_type" value="admittance_node.py" if="$(eval mode == 'admittance')"/>
+  <arg name="node_type" value="screw_insertion_node.py" if="$(eval mode == 'insertion')"/>
+
+  <node name="force_control" pkg="applications_helene" type="$(arg node_type)" output="screen">
+    <param name="force_topic" value="$(arg force_topic)"/>
+    <param name="msg_type" value="$(arg msg_type)"/>
+    <param name="sensor_frame" value="$(arg sensor_frame)"/>
+    <param name="tool_frame" value="$(arg tool_frame)"/>
+    <param name="world_frame" value="world"/>
+    <param name="force_sign" value="$(arg force_sign)"/>
+    <param name="force_scale" value="$(arg force_scale)"/>
+    <param name="twist_topic" value="/servo_server/delta_twist_cmds"/>
+    <!-- insertion tuning (SI units), see force_control.py / FORCE_CONTROL.md -->
+    <param name="target_force" value="2.0"/>
+    <param name="force_gain" value="0.00015"/>
+    <param name="expected_stiffness" value="20000.0"/>
+    <param name="expected_latency" value="0.1"/>
+  </node>
+</launch>

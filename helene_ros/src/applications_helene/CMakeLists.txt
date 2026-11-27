@@ -225,3 +225,9 @@ target_link_libraries(data_logger ${catkin_LIBRARIES})
 
 add_executable(complete_data_logger src/complete_data_logger.cpp)
 target_link_libraries(complete_data_logger ${catkin_LIBRARIES})
+
+catkin_install_python(PROGRAMS
+  scripts/admittance_node.py
+  scripts/screw_insertion_node.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
